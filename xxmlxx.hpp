@@ -204,20 +204,23 @@ namespace xxmlxx {
             return push_node<Flag>(f, begin(), std::forward<Args>(args)...);
         }
 
+        // Since child must be pushed to tree after this parent.
+        // We will only search those nodes after it.
+        
         constexpr inline iterator find_first_child(iterator b) {
-            return std::ranges::find_if(*this, [this, b](const auto& it) {
-                return it.parent_id() == (b - begin());
+            return std::find_if(b + 1, end(), [b, this](const auto& it) {
+                return it.parent_id() == b - begin();
             });
         }
 
         constexpr inline iterator find_first_child_with_name(iterator b, std::string_view name) {
-            return std::ranges::find_if(*this, [this, b, name](const auto& it) {
+            return std::find_if(b + 1, end(), [b, this, name](const auto& it) {
                 return it.parent_id() == (b - begin()) && it.name() == name;
             });
         }
 
         constexpr inline iterator find_first_child_with_attribute(iterator b, std::string_view key, std::string_view value) {
-            return std::ranges::find_if(*this, [this, b, key, value](auto& it) {
+            return std::find_if(b + 1, end(), [b, this, key, value](auto it) {
                 auto a = it.find_attribute(key);
                 return it.parent_id() == (b - begin()) && a != it.end_attribute() && a->key == key && a->value == value;
             });
@@ -319,7 +322,7 @@ namespace xxmlxx {
 
     struct     segment_info_type {
         segment_type                   type;
-        std::string                    name;
+        std::string_view               name;
         std::vector<element_attribute> attributes;
     };
 
@@ -441,7 +444,7 @@ namespace xxmlxx {
             // Some basic parser implementation.
             template <bool Inversed>
             struct parser_string_range_character_impl {
-                using                 result_type = char;
+                using                 result_type = std::string_view;
                 std::string_view      range;
                 
                 constexpr     result<result_type> operator()(std::string_view input) const {
@@ -450,7 +453,7 @@ namespace xxmlxx {
                     } else {
                         if (input.empty() || range.find(input.front()) != std::string_view::npos) { return std::string_view("One of string inversed matched failed!"); }
                     }
-                    return std::make_pair(input.front(), input.substr(1));
+                    return std::make_pair(input.substr(0, 1), input.substr(1));
                 }
             };
 
@@ -475,7 +478,7 @@ namespace xxmlxx {
                 using              result_type = std::string_view;
                 std::string_view   pattern;
                 constexpr          result<result_type> operator()(std::string_view input) const {
-                    if (input.starts_with(pattern)) { return std::make_pair(pattern, input.substr(pattern.size())); }
+                    if (input.starts_with(pattern)) { return std::make_pair(input.substr(0, pattern.size()), input.substr(pattern.size())); }
                     return std::string_view("Sequence string matched failed!");
                 }
             };
@@ -656,7 +659,7 @@ namespace xxmlxx {
             });
             return  {
                 segment_type::open,
-                std::string(1, std::get<0>(std::get<1>(open))) + std::string(std::get<1>(std::get<1>(open))),
+                std::string_view(&std::get<0>(std::get<1>(open)).front(), std::get<1>(std::get<1>(open)).size() + 1),
                 std::vector<element_attribute>(transformed_view.begin(), transformed_view.end())
             };
         }
@@ -664,7 +667,7 @@ namespace xxmlxx {
         static constexpr segment_info_type segment_info(const decltype(close_tag)::result_type& close) {
             return {
                 segment_type::close,
-                std::string(1, std::get<0>(std::get<1>(close))) + std::string(std::get<1>(std::get<1>(close))), {}
+                std::string_view(&std::get<0>(std::get<1>(close)).front(), std::get<1>(std::get<1>(close)).size() + 1), {}
             };
         }
 
@@ -675,14 +678,14 @@ namespace xxmlxx {
             });
             return {
                 segment_type::self,
-                std::string(1, std::get<0>(std::get<1>(self))) + std::string(std::get<1>(std::get<1>(self))), 
+                std::string_view(&std::get<0>(std::get<1>(self)).front(), std::get<1>(std::get<1>(self)).size() + 1),
                 std::vector<element_attribute>(transformed_view.begin(), transformed_view.end())
             };
         }
 
         static constexpr segment_info_type segment_info(const std::string_view&  char_data) {
             return {
-                segment_type::characters, std::string(char_data), {}
+                segment_type::characters, char_data, {}
             };
         }
     }
