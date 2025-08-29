@@ -795,9 +795,8 @@ namespace xxmlxx {
         // Add root first because our tree doesn't support pushing root after construction.
         tree_mem.begin()->name(current_segment.info().name)->attribute(current_segment.info().attributes);
         segment_stack.push_back(0);
-        ++current_segment;
         
-        for (;current_segment != parser_segment_iterator(); ++current_segment) {
+        for (++current_segment; current_segment != parser_segment_iterator(); ++current_segment) {
             if (!current_segment) {
                 return parser_segment_iterator(current_segment.error());
             }
@@ -809,7 +808,7 @@ namespace xxmlxx {
             case xxmlxx::segment_type::comment:
                 break;
             case xxmlxx::segment_type::open:
-                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), info.name, "", info.attributes);
+                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), std::string(info.name), "", info.attributes);
                 segment_stack.push_back(tree_mem.node_count() - 1);
                 break;
             case xxmlxx::segment_type::close:
@@ -819,7 +818,7 @@ namespace xxmlxx {
                 segment_stack.pop_back();
                 break;
             case xxmlxx::segment_type::self:
-                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), info.name, "", info.attributes);
+                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), std::string(info.name), "", info.attributes);
                 break;
             default:
                 return parser_segment_iterator("Not a valid segment type");
