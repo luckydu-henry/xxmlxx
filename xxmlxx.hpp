@@ -26,6 +26,13 @@ namespace xxmlxx {
         std::string key;
         std::string value;
 
+        constexpr element_attribute(std::string_view k, std::string_view v) : key(k), value(v) {}
+        constexpr element_attribute() = default;
+        constexpr element_attribute(const element_attribute&)              = default;
+        constexpr element_attribute(element_attribute&&)                   = default;
+        constexpr element_attribute& operator=(const element_attribute&)   = default;
+        constexpr element_attribute& operator=(element_attribute&&)        = default;
+
         inline std::string to_string() const {
             return std::format("{:s}=\"{:s}\"", key, value);
         } 
@@ -35,11 +42,15 @@ namespace xxmlxx {
     typedef struct node_data_comment {
         std::string name;
 
-        constexpr node_data_comment() = default;
-        constexpr node_data_comment(std::string_view n) : name(n.data()) {}
+        constexpr node_data_comment(std::string_view n) : name(n) {}
+        constexpr node_data_comment()                                     = default;
+        constexpr node_data_comment(const node_data_comment&)             = default;
+        constexpr node_data_comment(node_data_comment&&)                  = default;
+        constexpr node_data_comment& operator=(const node_data_comment&)  = default;
+        constexpr node_data_comment& operator=(node_data_comment&&)       = default;
 
         template <std::uint8_t internal_flag>
-        constexpr inline std::string to_string() const {
+        constexpr std::string to_string() const {
             if constexpr (internal_flag & internal_fmt_flags::open_tag) {
                 return std::format("<!--{:s}-->", name);
             }
@@ -52,10 +63,15 @@ namespace xxmlxx {
         std::string                    content;
         std::vector<element_attribute> attributes;
 
-        constexpr inline node_data_element() = default;
-        constexpr inline node_data_element(std::string_view n, std::string_view c = "", const std::vector<element_attribute>& a = {}) : name(n.data()), content(c.data()), attributes(a) {}
+        constexpr node_data_element()                                     = default;
+        constexpr node_data_element(const node_data_element&)             = default;
+        constexpr node_data_element(node_data_element&&)                  = default;
+        constexpr node_data_element& operator=(const node_data_element&)  = default;
+        constexpr node_data_element& operator=(node_data_element&&)       = default;
+        constexpr node_data_element(std::string_view n, std::string_view c = "", const std::vector<element_attribute>& a = {})
+        : name(n), content(c), attributes(a) {}
 
-        constexpr inline std::string attributes_to_string() const {
+        constexpr std::string attributes_to_string() const {
             std::string buffer;
             for (const auto& a : attributes) {
                 buffer.push_back(' ');
@@ -65,7 +81,7 @@ namespace xxmlxx {
         }
         
         template <std::uint8_t internal_flag>
-        constexpr inline std::string to_string() const {
+        constexpr std::string to_string() const {
             if constexpr (internal_flag & internal_fmt_flags::self_tag) {
                 if (content.empty()) { return std::format("<{:s}{:s}/>", name, attributes_to_string()); }
                 return std::format("<{0:s}{1:s}>{2:s}</{0:s}>", name, attributes_to_string(), content);
@@ -95,15 +111,16 @@ namespace xxmlxx {
         using iterator       = tree_node*;
         using const_iterator = const tree_node*;
         
-        tree_node() = default;
-        tree_node(const tree_node&)           = default;
+        tree_node()                            = default;
+        tree_node(const tree_node&)            = default;
         tree_node(tree_node&&)                 = default;
         tree_node& operator=(const tree_node&) = default;
         tree_node& operator=(tree_node&&)      = default;
+        
         ~tree_node() = default;
 
         template <class Flag, typename ... Args>
-        constexpr inline tree_node(Flag f, std::ptrdiff_t pid, Args&& ... args) : parent_id_(pid), data_() {
+        constexpr tree_node(Flag f, std::ptrdiff_t pid, Args&& ... args) : parent_id_(pid), data_() {
             if constexpr (std::is_convertible_v<decltype(node_comment), Flag>) {
                 data_.emplace<node_data_comment>(std::forward<Args>(args)...);
             }
@@ -114,55 +131,55 @@ namespace xxmlxx {
         
         constexpr std::ptrdiff_t parent_id() const { return parent_id_; }
 
-        constexpr inline std::size_t depth(const_iterator begin) const {
+        constexpr std::size_t depth(const_iterator begin) const {
             std::ptrdiff_t d = 0;
             for (auto it = this; it->parent_id_ != -1; it = begin + it->parent_id_) { ++d; }
             return static_cast<std::size_t>(d);
         }
 
         template <std::uint8_t internal_flag>
-        constexpr inline std::string to_string(std::size_t d) const {
+        constexpr std::string to_string(std::size_t d) const {
             std::string space(d << 1, ' ');
             return std::visit([&space](auto&& f) { return std::format("{:s}{:s}\n", space, f.template to_string<internal_flag>()); }, data_);
         }
 
-        constexpr inline std::string_view name() const {
+        constexpr std::string_view name() const {
             return std::visit([](auto&& f) { return std::string_view(f.name); }, data_);
         }
 
-        constexpr inline tree_node*        name(std::string_view n) {
+        constexpr tree_node*        name(std::string_view n) {
             std::visit([n](auto&& f) { return f.name = n; }, data_);
             return this;
         }
 
-        constexpr inline tree_node*        text(std::string_view t) {
+        constexpr tree_node*        text(std::string_view t) {
             std::get<node_data_element>(data_).content = t;
             return this;
         }
 
-        constexpr inline std::string_view text() const {
+        constexpr std::string_view text() const {
             return std::string_view(std::get<node_data_element>(data_).content);
         }
 
-        constexpr inline tree_node*       push_attribute(std::string_view key, std::string_view val) {
-            std::get<node_data_element>(data_).attributes.emplace_back(key.data(), val.data());
+        constexpr tree_node*       push_attribute(std::string_view key, std::string_view val) {
+            std::get<node_data_element>(data_).attributes.emplace_back(key, val);
             return this;
         }
 
-        constexpr inline tree_node*       attribute(const std::vector<element_attribute>& attr) {
+        constexpr tree_node*       attribute(const std::vector<element_attribute>& attr) {
             std::get<node_data_element>(data_).attributes = attr;
             return this;
         }
 
-        constexpr inline auto             begin_attribute() {
+        constexpr auto             begin_attribute() {
             return std::get<node_data_element>(data_).attributes.begin();
         }
         
-        constexpr inline auto             end_attribute() {
+        constexpr auto             end_attribute() {
             return std::get<node_data_element>(data_).attributes.end();
         }
 
-        constexpr inline auto             find_attribute(std::string_view key) {
+        constexpr auto             find_attribute(std::string_view key) {
             return std::ranges::find_if(std::get<node_data_element>(data_).attributes, [key](const auto& a) {
                 return key == a.key;
             });
@@ -184,7 +201,7 @@ namespace xxmlxx {
         document_tree(document_tree&&)                 = default;
         document_tree& operator=(const document_tree&) = default;
         document_tree& operator=(document_tree&&)      = default;
-        ~document_tree()                      = default;
+        ~document_tree()                               = default;
 
         constexpr inline iterator begin() { return &nodes_.front(); }
         constexpr inline iterator end()   { return (&nodes_.back() + 1); }
@@ -740,26 +757,26 @@ namespace xxmlxx {
         std::string_view                  error_;
         document_parser::segment_type     segment_;
     public:
-        constexpr explicit parser_segment_iterator(document_parser& parser) noexcept : parser_(&parser), not_end_(false), error_(), segment_() {
+        
+        constexpr explicit parser_segment_iterator(document_parser& parser) : parser_(&parser), not_end_(false), error_(), segment_() {
             if (auto r = parser.skip_decl(); r.empty()) {
                 if (auto s = parser.next_segment(segment_); s.empty()) {
                     not_end_ = true;
                 } else { error_ = s; }
             } else { error_ = r; }
         }
-        constexpr explicit parser_segment_iterator() = default;
-        constexpr explicit parser_segment_iterator(std::string_view e) noexcept : error_(e) {}
-
-        constexpr parser_segment_iterator(const parser_segment_iterator&) noexcept = default;
-        constexpr parser_segment_iterator(parser_segment_iterator&&)      noexcept = default;
-        constexpr parser_segment_iterator& operator=(const parser_segment_iterator&) noexcept = default;
-        constexpr parser_segment_iterator& operator=(parser_segment_iterator&&) noexcept = default;
+        constexpr parser_segment_iterator(std::string_view e) noexcept : error_(e) {}
+        constexpr parser_segment_iterator()                                           = default;
+        constexpr parser_segment_iterator(const parser_segment_iterator&)             = default;
+        constexpr parser_segment_iterator(parser_segment_iterator&&)                  = default;
+        constexpr parser_segment_iterator& operator=(const parser_segment_iterator&)  = default;
+        constexpr parser_segment_iterator& operator=(parser_segment_iterator&&)       = default;
 
         constexpr bool operator==(const parser_segment_iterator& other) const { return not_end_ == other.not_end_; }
         constexpr bool operator!=(const parser_segment_iterator& other) const { return not_end_ != other.not_end_; }
 
-        constexpr auto operator*()  const noexcept { return segment_; }
-        constexpr auto operator->() const noexcept { return &segment_; }
+        constexpr auto operator*()  const       { return segment_; }
+        constexpr auto operator->() const  { return &segment_; }
 
         constexpr parser_segment_iterator& operator++() {
             error_   = parser_->next_segment(segment_);
@@ -808,7 +825,7 @@ namespace xxmlxx {
             case xxmlxx::segment_type::comment:
                 break;
             case xxmlxx::segment_type::open:
-                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), std::string(info.name), "", info.attributes);
+                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), info.name, "", info.attributes);
                 segment_stack.push_back(tree_mem.node_count() - 1);
                 break;
             case xxmlxx::segment_type::close:
@@ -818,7 +835,7 @@ namespace xxmlxx {
                 segment_stack.pop_back();
                 break;
             case xxmlxx::segment_type::self:
-                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), std::string(info.name), "", info.attributes);
+                tree_mem.push_node(node_element, tree_mem.begin() + segment_stack.back(), info.name, "", info.attributes);
                 break;
             default:
                 return parser_segment_iterator("Not a valid segment type");
