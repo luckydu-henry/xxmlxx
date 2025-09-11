@@ -3,7 +3,7 @@ An **extremely light and efficient XML library** (probably the smallest one ever
 
 # Start
 Include `xxmlxx.hpp` and compile `xxmldemo.cpp` for simple usages, **the only thing you need to have is a C++20 compatible compiler**.
-This demo **runs successfully on Windows(MSVC17) and Linux(Ubuntu-24.04 g++14)**, so it's definitely platform independent.
+This demo **runs successfully on Windows(MSVC17) and Linux(Ubuntu-24.04 g++14, clang++-19)**, so it's definitely platform independent.
 
 # Features
 1. Single header, very portable.
