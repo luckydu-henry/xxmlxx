@@ -750,7 +750,7 @@ namespace xxmlxx {
         : doc_(document), last_add_one_(document.back() == '>'), time_to_add_one_(false) {}
 
         constexpr std::string_view        document() const noexcept { return doc_; }
-        constexpr parser_segment_iterator to_tree(document_tree&);
+        inline    parser_segment_iterator to_tree(document_tree&);
 
     };
 
@@ -807,7 +807,8 @@ namespace xxmlxx {
     ///                 Still only one function, yes...                    ///
     //////////////////////////////////////////////////////////////////////////
     
-    constexpr parser_segment_iterator document_parser::to_tree(document_tree& tree_mem) {
+    // A C++20 compiler should make this constexpr
+    inline parser_segment_iterator document_parser::to_tree(document_tree& tree_mem) {
         // Cache the index inside tree, an elegant way to avoid recursive. "inspired by Dijkstra's Double Stack Algorithm"
         std::vector<std::size_t>   segment_stack; 
         segment_stack.reserve(1024);
