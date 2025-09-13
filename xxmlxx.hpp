@@ -605,22 +605,22 @@ namespace xxmlxx {
         namespace literals {
             
             template <parser P1, parser P2>
-            static constexpr auto operator,(const P1& p1, const P2& p2) { return details::parser_continuation_impl{p1, p2}; }
+            static constexpr auto operator,(const P1& p1, const P2& p2) { return details::parser_continuation_impl<P1, P2>{p1, p2}; }
 
             template <parser P1, parser P2>
-            static constexpr auto operator|(const P1& p1, const P2& p2) { return details::parser_variation_impl{p1, p2}; }
+            static constexpr auto operator|(const P1& p1, const P2& p2) { return details::parser_variation_impl<P1, P2>{p1, p2}; }
 
             template <parser Parser>
-            static constexpr auto operator~(const Parser& p) { return details::parser_optional_impl{p}; }
+            static constexpr auto operator~(const Parser& p) { return details::parser_optional_impl<Parser>{p}; }
 
             template <parser Parser>
-            static constexpr auto operator*(const Parser& p) { return details::parser_many_impl{p}; }
+            static constexpr auto operator*(const Parser& p) { return details::parser_many_impl<Parser>{p}; }
 
             template <parser Parser>
-            static constexpr auto operator*(std::size_t n, const Parser& p) { return details::parser_many_counted_impl{p, n}; }
+            static constexpr auto operator*(std::size_t n, const Parser& p) { return details::parser_many_counted_impl<Parser>{p, n}; }
 
             template <parser Parser>
-            static constexpr auto operator+(const Parser& p) {  return details::parser_group_impl{p}; }
+            static constexpr auto operator+(const Parser& p) {  return details::parser_group_impl<Parser>{p}; }
 
             template <bool Inversed>
             static constexpr auto operator!(const details::parser_string_range_character_impl<Inversed>& p) {
@@ -718,13 +718,15 @@ namespace xxmlxx {
         std::string_view    doc_;
         bool                last_add_one_;
         bool                time_to_add_one_;
+        
         constexpr std::string_view skip_decl() {
             auto r = pc::declaration_tag(doc_);
             if (r) { doc_ = r->second; }
             return r.error();
         }
 
-        constexpr std::string_view next_segment(segment_type& bk) {
+        // A complete C++20 compiler should make this method constexpr available
+        std::string_view next_segment(segment_type& bk) {
             // First jump through all spaces.
             if (!time_to_add_one_) {
                 doc_ = pc::ws(doc_)->second;
@@ -752,6 +754,7 @@ namespace xxmlxx {
 
     };
 
+    // A complete C++20 compiler should make all method constexpr available
     class parser_segment_iterator {
         document_parser*                  parser_ = nullptr;
         bool                              not_end_ = false;
@@ -759,32 +762,35 @@ namespace xxmlxx {
         document_parser::segment_type     segment_;
     public:
         
-        constexpr explicit parser_segment_iterator(document_parser& parser) : parser_(&parser), not_end_(false), error_(), segment_() {
+        explicit parser_segment_iterator(document_parser& parser) : parser_(&parser), not_end_(false), error_(), segment_() {
             if (auto r = parser.skip_decl(); r.empty()) {
                 if (auto s = parser.next_segment(segment_); s.empty()) {
                     not_end_ = true;
                 } else { error_ = s; }
             } else { error_ = r; }
         }
+        
         constexpr parser_segment_iterator(std::string_view e) noexcept : error_(e) {}
         constexpr parser_segment_iterator()                                           = default;
         constexpr parser_segment_iterator(const parser_segment_iterator&)             = default;
         constexpr parser_segment_iterator(parser_segment_iterator&&)                  = default;
-        constexpr parser_segment_iterator& operator=(const parser_segment_iterator&)  = default;
-        constexpr parser_segment_iterator& operator=(parser_segment_iterator&&)       = default;
+
+        parser_segment_iterator& operator=(const parser_segment_iterator&)  = default;
+        parser_segment_iterator& operator=(parser_segment_iterator&&)       = default;
 
         constexpr bool operator==(const parser_segment_iterator& other) const { return not_end_ == other.not_end_; }
         constexpr bool operator!=(const parser_segment_iterator& other) const { return not_end_ != other.not_end_; }
 
-        constexpr auto operator*()  const       { return segment_; }
-        constexpr auto operator->() const  { return &segment_; }
+        auto operator*()  const       { return segment_; }
+        auto operator->() const  { return &segment_; }
 
-        constexpr parser_segment_iterator& operator++() {
+        parser_segment_iterator& operator++() {
             error_   = parser_->next_segment(segment_);
             not_end_ = parser_->not_end();
             return *this;
         }
-        constexpr parser_segment_iterator  operator++(int) { auto tmp = *this; ++*this; return tmp; }
+        
+        parser_segment_iterator  operator++(int) { auto tmp = *this; ++*this; return tmp; }
 
         constexpr segment_info_type  info() const {
             return std::visit([](auto&& v) {
