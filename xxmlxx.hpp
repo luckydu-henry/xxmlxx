@@ -300,14 +300,13 @@ namespace xxmlxx {
         ////////////////////////////////////////////////////////////////
 
         // Align makes faster
-        struct alignas(2048) segment_context {
+        
+        struct segment_context {
             document_tag_category       category;
-            std::uint16_t               buffer_size;               
-            std::array<char, 2044>      buffer;
+            std::string                 buffer;
 
-            constexpr void clear() {
-                buffer.fill(0);
-                buffer_size = 0;
+            constexpr segment_context() : category(document_tag_category::unknow), buffer() {
+                buffer.reserve(2048);
             }
         };
 
@@ -325,13 +324,12 @@ namespace xxmlxx {
                     auto name_rest  = std::get<3>(val);
                     auto aval = std::visit([](auto&& a) { return std::get<1>(a); }, std::get<7>(val));
 
-                    ctx.buffer[ctx.buffer_size++] = ' ';
-                    ctx.buffer[ctx.buffer_size++] = name_front.front();
-                    std::memcpy(ctx.buffer.data() + ctx.buffer_size, name_rest.data(), name_rest.size()); ctx.buffer_size += static_cast<std::uint16_t>(name_rest.size());
-                    ctx.buffer[ctx.buffer_size++] = '=';
-                    ctx.buffer[ctx.buffer_size++] = '\"';
-                    std::memcpy(ctx.buffer.data() + ctx.buffer_size, aval.data(), aval.size()); ctx.buffer_size += static_cast<std::uint16_t>(aval.size());
-                    ctx.buffer[ctx.buffer_size++] = '\"';
+                    ctx.buffer.push_back(' ');
+                    ctx.buffer.push_back(name_front.front());
+                    ctx.buffer.append(name_rest);
+                    ctx.buffer.append("=\"");
+                    ctx.buffer.append(aval);
+                    ctx.buffer.push_back('\"');
                     
                     input = remain;
                 }
@@ -346,26 +344,26 @@ namespace xxmlxx {
         };
 
         static constexpr auto parse_tag_open_or_self = ("<"_ss, parse_name, parser_attribute_pairs{}, parse_ws, ~"/"_ss, ">"_ss) % CONTEXT(ctx) {
-            ctx.category = std::get<5>(result->first) ? document_tag_category::self : document_tag_category::open;
+            ctx.category     = std::get<5>(result->first) ? document_tag_category::self : document_tag_category::open;
             auto name_front  = std::get<1>(result->first);
             auto name_rest   = std::get<2>(result->first);
             // Because we will call parser first then action.
-            std::memmove(ctx.buffer.data() + name_rest.size() + 1, ctx.buffer.data(), ctx.buffer_size);
-            ctx.buffer[0] = name_front.front();
-            std::memcpy(ctx.buffer.data() + 1, name_rest.data(), name_rest.size()); ctx.buffer_size += static_cast<std::uint16_t>(name_rest.size() + 1);
+            ctx.buffer.insert(0, name_rest);
+            ctx.buffer.insert(ctx.buffer.begin(), name_front.front());
         };
 
         static constexpr auto parse_tag_close = ("</"_ss, parse_name, ">"_ss) % CONTEXT(ctx) {
-            ctx.category = document_tag_category::close;
+            ctx.category     = document_tag_category::close;
             auto name_front  = std::get<1>(result->first);
             auto name_rest   = std::get<2>(result->first);
-            ctx.buffer[ctx.buffer_size++] = name_front.front();
-            std::memcpy(ctx.buffer.data() + ctx.buffer_size, name_rest.data(), name_rest.size()); ctx.buffer_size += static_cast<std::uint16_t>(name_rest.size());
+
+            ctx.buffer.push_back(name_front.front());
+            ctx.buffer.append(name_rest);
         };
 
         static constexpr auto parse_tag_text = !"<&"_ls % CONTEXT(ctx) {
             ctx.category = document_tag_category::text;
-            std::memcpy(ctx.buffer.data() + ctx.buffer_size, result->first.data(), result->first.size());
+            ctx.buffer.append(result->first);
         };
 #undef CONTEXT
         // The actual parser we would call.
@@ -375,20 +373,6 @@ namespace xxmlxx {
         static constexpr int  no_context = 0;
     }
 
-    enum class tree_node_capacity_level : std::size_t {
-        bit          = 64,
-        tiny         = 96,
-        small        = 128,
-        standard     = 160,
-        big          = 192,
-        large        = 224,
-        
-        two28         = 256,
-        two29         = 512,
-        two210        = 1024,
-        two211        = 2048
-    };
-
     enum class tree_node_category : std::uint8_t {
         unknow  = 0,
         element = 1,
@@ -396,24 +380,25 @@ namespace xxmlxx {
         comment = 3
     };
     
-    template <tree_node_capacity_level CapID>
-    class alignas(32) tree_node {
+    template <class StrAllocator>
+    class tree_node {
         std::int32_t                                                          parent_index_ = 0;
         tree_node_category                                                    category_     = tree_node_category::unknow;
         std::uint8_t                                                          depth_        = 0;
-        std::uint16_t                                                         buffer_size_  = 0;
-        std::array<char, static_cast<std::size_t>(CapID) - 8>                 buffer_;
+        std::basic_string<char, std::char_traits<char>, StrAllocator>         buffer_;
     public:
-        static constexpr std::size_t capacity = static_cast<std::size_t>(CapID) - 8;
 
+        using allocator_type         = StrAllocator;
+        using string_type            = std::basic_string<char, std::char_traits<char>, StrAllocator>;
         using iterator               = tree_node*;
         using const_iterator         = const tree_node*;
         using reverse_iterator       = std::reverse_iterator<tree_node*>;
         using const_reverse_iterator = const std::reverse_iterator<tree_node*>;
         
-        constexpr tree_node(iterator begin, tree_node_category cat, std::int32_t pid, std::string_view node_content)
-            : parent_index_(pid), category_(cat), depth_(0), buffer_size_(static_cast<std::uint16_t>(node_content.size())), buffer_('\0') {
-            std::memcpy(buffer_.data(), node_content.data(), node_content.size());
+        constexpr tree_node(iterator begin, tree_node_category cat, std::int32_t pid, std::string_view node_content, const StrAllocator& allocator)
+            : parent_index_(pid), category_(cat), depth_(0), buffer_(allocator){
+            buffer_.reserve(256);
+            buffer_.assign(node_content);
             for (auto it = this; it->parent_index_ != -1; it = begin + it->parent_index_) { ++depth_; }
         }
 
@@ -430,11 +415,11 @@ namespace xxmlxx {
         constexpr tree_node_category category()  const { return category_; }
 
         constexpr iterator           fill_buffer(std::string_view s) {
-            buffer_size_ = static_cast<std::uint16_t>(s.size());
-            std::memcpy(buffer_.data(), s.data(), s.size());
+            buffer_.assign(s);
             return this;
         }
-        constexpr auto               buffer() const { return buffer_.data(); }
+
+        constexpr auto               get_allocator() const { return buffer_.get_allocator(); }
         
         constexpr std::size_t        depth() const {
             return static_cast<std::size_t>(depth_);
@@ -442,22 +427,20 @@ namespace xxmlxx {
 
         constexpr std::string_view   name() const {
             if (category_ == tree_node_category::element) [[likely]] {
-                std::string_view        temp(buffer_.data(), buffer_size_);
-                const std::size_t       first_space  = temp.find(' ');
-                const std::size_t       length       = first_space == std::string_view::npos ? buffer_size_ : first_space;
-                return temp.substr(0, length);
+                const std::size_t       first_space  = buffer_.find(' ');
+                const std::size_t       length       = first_space == std::string_view::npos ? buffer_.size() : first_space;
+                return std::string_view(buffer_.data(), length);
             }
-            return std::string_view();
+            return {};
         }
 
         constexpr iterator           push_attribute(std::string_view k, std::string_view v) {
             if (category_ == tree_node_category::element) [[likely]] {
-                buffer_[buffer_size_++] = ' ';
-                std::memcpy(buffer_.data() + buffer_size_, k.data(), k.size()); buffer_size_ += static_cast<std::uint16_t>(k.size());
-                buffer_[buffer_size_++] = '=';
-                buffer_[buffer_size_++] = '\"';
-                std::memcpy(buffer_.data() + buffer_size_, v.data(), v.size()); buffer_size_ += static_cast<std::uint16_t>(v.size());
-                buffer_[buffer_size_++] = '\"';
+                buffer_.push_back(' ');
+                buffer_.append(k);
+                buffer_.append("=\"");
+                buffer_.append(v);
+                buffer_.push_back("\"");
             }
             return this;
         }
@@ -477,14 +460,12 @@ namespace xxmlxx {
         }
 
         constexpr std::string_view   text() const {
-            return category_ == tree_node_category::text ? std::string_view(buffer_.data(), buffer_size_) : std::string_view();
+            return category_ == tree_node_category::text ? std::string_view(buffer_.data(), buffer_.size()) : std::string_view();
         }
 
         constexpr std::string_view   comment() const {
-            return category_ == tree_node_category::comment ? std::string_view(buffer_.data(), buffer_size_) : std::string_view();
+            return category_ == tree_node_category::comment ? std::string_view(buffer_.data(), buffer_.size()) : std::string_view();
         }
-
-        constexpr std::size_t        size_available() const { return capacity - static_cast<std::size_t>(buffer_size_); }
 
         template <details::document_tag_category TagCat, class OutputIt>
         constexpr auto               format_to(OutputIt it) const -> OutputIt {
@@ -492,45 +473,42 @@ namespace xxmlxx {
             case tree_node_category::unknow: break;
             case tree_node_category::element:
                 if constexpr (TagCat == details::document_tag_category::open) {
-                    return std::format_to_n(it, buffer_size_ + 3, "<{:s}>\n",        buffer_.data()).out;
+                    return std::format_to(it, "<{:s}>\n", buffer_);
                 }
                 if constexpr (TagCat == details::document_tag_category::close) {
-                    auto n = name();
-                    return std::format_to_n(it, n.length() + 4, "</{:s}>\n", n).out;
+                    return std::format_to(it, "</{:s}>\n", name());
                 }
                 if constexpr (TagCat == details::document_tag_category::self) {
-                    return std::format_to_n(it, buffer_size_ + 4, "<{:s}/>\n",       buffer_.data()).out;
+                    return std::format_to(it, "<{:s}/>\n",buffer_);
                 } break;
             case tree_node_category::text:
                 if constexpr (TagCat == details::document_tag_category::open || TagCat == details::document_tag_category::self) {
-                    return std::format_to_n(it, buffer_size_, "{:s}",          buffer_.data()).out;
+                    return std::format_to(it, "{:s}",          buffer_);
                 } break;
             case tree_node_category::comment:
                 if constexpr (TagCat == details::document_tag_category::open || TagCat == details::document_tag_category::self) {
-                    return std::format_to_n(it, buffer_size_ + 8, "<!--{:s}-->\n",   buffer_.data()).out;
+                    return std::format_to(it, "<!--{:s}-->\n",   buffer_);
                 } break;
             }
-            return std::format_to_n(it, 1, "\n").out;
+            return std::format_to(it, "\n");
         }
     };
 
-    template <tree_node_capacity_level CapID = tree_node_capacity_level::standard, class Allocator = std::allocator<tree_node<CapID>>>
+    template <class StrAllocator = std::allocator<char>, class VecAllocator = std::allocator<tree_node<StrAllocator>>>
     class document_tree {
-        std::vector<tree_node<CapID>, Allocator> nodes_;
+        std::vector<tree_node<StrAllocator>, VecAllocator> nodes_;
     public:
-        using node_type              = tree_node<CapID>;
-        using allocator_type         = Allocator;
+        using node_type              = tree_node<StrAllocator>;
+        using allocator_type         = VecAllocator;
         using iterator               = typename node_type::iterator;
         using const_iterator         = typename node_type::const_iterator;
         using reverse_iterator       = typename node_type::reverse_iterator;
         using const_reverse_iterator = typename node_type::const_reverse_iterator;
         
-        static constexpr std::size_t capacity  = node_type::capacity;
-
-        constexpr document_tree(std::string_view name, std::size_t init_cap = 1024, const Allocator& alloc = Allocator{})
+        constexpr document_tree(std::string_view name, std::size_t init_cap = 1024, const StrAllocator& str_alloc = StrAllocator{}, const VecAllocator& alloc = VecAllocator{})
             : nodes_(alloc) {
             nodes_.reserve(init_cap);
-            nodes_.emplace_back(nullptr, tree_node_category::element, -1 , name);
+            nodes_.emplace_back(nullptr, tree_node_category::element, -1 , name, str_alloc);
         }
         
         constexpr iterator       begin()        { return &nodes_.front(); }
@@ -554,17 +532,17 @@ namespace xxmlxx {
         }
 
         // Only use this when you are sure the node you are trying to push has the greatest parent id.
-        constexpr iterator emplace(tree_node_category cat, iterator parent, std::string_view node_content) {
-            return &nodes_.emplace_back(begin(), cat, static_cast<std::int32_t>(parent - begin()), node_content);
+        constexpr iterator emplace(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return &nodes_.emplace_back(begin(), cat, static_cast<std::int32_t>(parent - begin()), node_content, alloc);
         }
 
-        constexpr iterator emplace(tree_node_category cat, std::string_view node_content) {
-            return emplace(cat, begin(), node_content);
+        constexpr iterator emplace(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return emplace(cat, begin(), node_content, alloc);
         }
 
         // View vector as a special heap, where all elements are sorted and related differences are maintained.
         // Guarantee order safety but can be slow.
-        constexpr iterator push(tree_node_category cat, iterator parent, std::string_view node_content) {
+        constexpr iterator push(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
             auto compare = [](int32_t id, const node_type& node) {
                 return id < node.parent_id();
             };
@@ -572,22 +550,20 @@ namespace xxmlxx {
             const auto insert_pos = static_cast<std::int32_t>(std::upper_bound(begin(), end(), pid, compare) - begin());
             auto       update_it  = std::upper_bound(begin(), end(), static_cast<std::int32_t>(insert_pos - 1), compare);
             std::ranges::for_each_n(update_it, end() - update_it, [](auto& n) { ++n.parent_id(); });
-            nodes_.emplace_back();
-            std::memmove(&nodes_[insert_pos + 1], &nodes_[insert_pos], (nodes_.size() - 1 - insert_pos) * sizeof(node_type));
-            return std::construct_at(&nodes_[insert_pos], begin(), cat, pid, node_content);
+            return &*nodes_.emplace(nodes_.begin() + insert_pos, begin(), cat, pid, node_content, alloc);
         }
 
-        constexpr iterator push(tree_node_category cat, std::string_view node_content) {
-            return push(cat, begin(), node_content);
+        constexpr iterator push(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return push(cat, begin(), node_content, alloc);
         }
 
         // Always use this if you can.
-        constexpr iterator insert(tree_node_category cat, iterator parent, std::string_view node_content) {
-            return parent - begin() >= rbegin()->parent_id() ? emplace(cat, parent, node_content) : push(cat, parent, node_content);
+        constexpr iterator insert(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return parent - begin() >= rbegin()->parent_id() ? emplace(cat, parent, node_content, alloc) : push(cat, parent, node_content, alloc);
         }
 
-        constexpr iterator insert(tree_node_category cat, std::string_view node_content) {
-            return insert(cat, begin(), node_content);
+        constexpr iterator insert(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return insert(cat, begin(), node_content, alloc);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -705,8 +681,8 @@ namespace xxmlxx {
 
         constexpr std::string_view        document() const noexcept { return doc_; }
 
-        template <tree_node_capacity_level CapID, class DocAllocator = std::allocator<char>>
-        constexpr parser_segment_iterator to_tree(document_tree<CapID, DocAllocator>&);
+        template <class StrAllocator, class DocAllocator = std::allocator<char>>
+        constexpr parser_segment_iterator to_tree(document_tree<StrAllocator, DocAllocator>&);
         
     };
     
@@ -741,7 +717,7 @@ namespace xxmlxx {
         constexpr auto operator->() const   { return &segment_; }
 
         constexpr parser_segment_iterator& operator++() {
-            segment_.clear();
+            segment_.buffer.clear();
             error_   = parser_.next_segment(segment_);
             not_end_ = parser_.not_end();
             return *this;
@@ -757,8 +733,8 @@ namespace xxmlxx {
     ///                         XML Input Part                             ///
     //////////////////////////////////////////////////////////////////////////
     
-    template <tree_node_capacity_level CapID, class DocAllocator>
-    constexpr parser_segment_iterator document_parser::to_tree(document_tree<CapID, DocAllocator>& tree_mem) {
+    template <class StrAllocator, class DocAllocator>
+    constexpr parser_segment_iterator document_parser::to_tree(document_tree<StrAllocator, DocAllocator>& tree_mem) {
         // Cache the index inside tree, an elegant way to avoid recursive. "inspired by Dijkstra's Double Stack Algorithm"
         std::uint8_t                  stack_top = 0;
         std::array<std::int32_t, 128> segment_stack{}; // I think this is already large enough.
@@ -768,7 +744,7 @@ namespace xxmlxx {
             return parser_segment_iterator("Root node (first node) can not be comment or anything else!");
         }
         // Add root first because our tree doesn't support pushing root after construction.
-        tree_mem.begin()->fill_buffer(current_segment->buffer.data());
+        tree_mem.begin()->fill_buffer(current_segment->buffer);
         segment_stack[++stack_top] = 0;
         
         for (++current_segment; current_segment != parser_segment_iterator(); ++current_segment) {
@@ -777,18 +753,19 @@ namespace xxmlxx {
             }
             switch (current_segment->category) {
             case details::document_tag_category::text:
-                tree_mem.insert(tree_node_category::text, tree_mem.begin() + segment_stack[stack_top], current_segment->buffer.data()); break;
+                tree_mem.insert(tree_node_category::text, tree_mem.begin() + segment_stack[stack_top], current_segment->buffer, tree_mem.begin()->get_allocator()); break;
             case details::document_tag_category::comment: break;
             case details::document_tag_category::open:
                 segment_stack[++stack_top] = static_cast<std::int32_t>(
                     tree_mem.insert(tree_node_category::element, tree_mem.begin() + segment_stack[stack_top],
-                   current_segment->buffer.data()) - tree_mem.begin()); break;
+                   current_segment->buffer, tree_mem.begin()->get_allocator()) - tree_mem.begin()); break;
             case details::document_tag_category::close:
-                if ((tree_mem.begin() + segment_stack[stack_top])->name() != current_segment->buffer.data()) {
+                if (current_segment->buffer != (tree_mem.begin() + segment_stack[stack_top])->name()) {
                     return parser_segment_iterator("Unmatched element!"); 
                 } --stack_top; break;
             case details::document_tag_category::self:
-                tree_mem.insert(tree_node_category::element, tree_mem.begin() + segment_stack[stack_top], current_segment->buffer.data()); break;
+                tree_mem.insert(tree_node_category::element, tree_mem.begin() + segment_stack[stack_top],
+                    current_segment->buffer, tree_mem.begin()->get_allocator()); break;
             case details::document_tag_category::unknow:
                 return parser_segment_iterator("Not a valid segment type");
             }
