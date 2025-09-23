@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <vector>
 #include <ranges>
 #include <format>
@@ -386,6 +385,35 @@ namespace xxmlxx {
         tree_node_category                                                    category_     = tree_node_category::unknow;
         std::uint8_t                                                          depth_        = 0;
         std::basic_string<char, std::char_traits<char>, StrAllocator>         buffer_;
+
+        constexpr std::size_t          find_attribute_(std::string_view key) const {
+            std::size_t id = buffer_.find(key);
+            for (; id != std::string_view::npos; id = buffer_.find(key, id + key.size())) {
+                if (buffer_[id + key.size()] == '=' && buffer_[id + key.size() + 1] == '\"') {
+                    return id + key.size() + 2;
+                }
+            }
+            return std::string_view::npos;
+        }
+
+        constexpr void                 replace_attribute_(std::size_t off, std::string_view new_val) {
+            if (std::size_t end = buffer_.find('\"', off); end != std::string_view::npos) {
+                buffer_.replace(off, end - off, new_val);
+            }
+        }
+
+        constexpr void                 push_attribute_(std::string_view k, std::string_view v) {
+            buffer_.push_back(' ');
+            buffer_.append(k);
+            buffer_.append("=\"");
+            buffer_.append(v);
+            buffer_.push_back('\"');
+        }
+
+        constexpr std::string_view     get_attribute_(std::size_t off) const {
+            return std::string_view(buffer_.data() + off, buffer_.find('\"', off) - off);
+        }
+        
     public:
 
         using allocator_type         = StrAllocator;
@@ -434,15 +462,24 @@ namespace xxmlxx {
             return {};
         }
 
-        constexpr iterator           push_attribute(std::string_view k, std::string_view v) {
+        constexpr iterator           attribute(std::string_view k, std::string_view v) {
             if (category_ == tree_node_category::element) [[likely]] {
-                buffer_.push_back(' ');
-                buffer_.append(k);
-                buffer_.append("=\"");
-                buffer_.append(v);
-                buffer_.push_back("\"");
+                if (std::size_t id = find_attribute_(k); id != std::string_view::npos) {
+                    replace_attribute_(id, v);
+                } else {
+                    push_attribute_(k, v);
+                }
             }
             return this;
+        }
+
+        constexpr std::string_view   attribute(std::string_view k) const {
+            if (category_ == tree_node_category::element) [[likely]] {
+                if (auto id = find_attribute_(k); id != std::string_view::npos) {
+                    return get_attribute_(id);
+                }
+            }
+            return {};
         }
 
         constexpr iterator           text(std::string_view s) {
@@ -737,7 +774,7 @@ namespace xxmlxx {
     constexpr parser_segment_iterator document_parser::to_tree(document_tree<StrAllocator, DocAllocator>& tree_mem) {
         // Cache the index inside tree, an elegant way to avoid recursive. "inspired by Dijkstra's Double Stack Algorithm"
         std::uint8_t                  stack_top = 0;
-        std::array<std::int32_t, 128> segment_stack{}; // I think this is already large enough.
+        std::int32_t                  segment_stack[128]; // I think this is already large enough.
         parser_segment_iterator       current_segment(*this);
         
         if (current_segment->category != details::document_tag_category::open && current_segment->category != details::document_tag_category::self) {
