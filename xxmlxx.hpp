@@ -441,7 +441,8 @@ namespace xxmlxx {
         constexpr std::int32_t       parent_id() const { return parent_index_; }
         constexpr std::int32_t&      parent_id()       { return parent_index_; }
         
-        constexpr tree_node_category category()  const { return category_; }
+        constexpr tree_node_category   category()  const { return category_; }
+        constexpr tree_node_category&  category()        { return category_; }
 
         constexpr pointer           buffer(std::string_view s) {
             buffer_.assign(s);
@@ -567,14 +568,14 @@ namespace xxmlxx {
         constexpr reference       operator[](std::size_t i) const { return node_ptr_[i]; }
 
         constexpr document_tree_const_iterator& operator++()                             { ++node_ptr_; return *this; }
-        constexpr document_tree_const_iterator  operator++(int)                          { return document_tree_const_iterator{node_ptr_++, tree_ptr_}; }
+        constexpr document_tree_const_iterator  operator++(int)                          { return document_tree_const_iterator( tree_ptr_, node_ptr_++); }
         constexpr document_tree_const_iterator& operator+=(const std::ptrdiff_t d)       { node_ptr_ += d; return *this; }
-        constexpr document_tree_const_iterator  operator+ (const std::ptrdiff_t d) const { return document_tree_const_iterator{node_ptr_ + d, tree_ptr_}; }
+        constexpr document_tree_const_iterator  operator+ (const std::ptrdiff_t d) const { return document_tree_const_iterator(tree_ptr_, node_ptr_ + d); }
 
         constexpr document_tree_const_iterator& operator--()                             { --node_ptr_; return *this; }
-        constexpr document_tree_const_iterator  operator--(int)                          { return document_tree_const_iterator{node_ptr_--, tree_ptr_}; }
+        constexpr document_tree_const_iterator  operator--(int)                          { return document_tree_const_iterator(tree_ptr_, node_ptr_--); }
         constexpr document_tree_const_iterator& operator-=(const std::ptrdiff_t d)       { node_ptr_ -= d; return *this; }
-        constexpr document_tree_const_iterator  operator- (const std::ptrdiff_t d) const { return document_tree_const_iterator{node_ptr_ - d, tree_ptr_}; }
+        constexpr document_tree_const_iterator  operator- (const std::ptrdiff_t d) const { return document_tree_const_iterator(tree_ptr_, node_ptr_ - d); }
         
         constexpr bool operator==(const document_tree_const_iterator& right) const { return tree_ptr_ == right.tree_ptr_ && node_ptr_ == right.node_ptr_; }
         constexpr bool operator!=(const document_tree_const_iterator& right) const { return node_ptr_ != right.node_ptr_ || tree_ptr_ != right.tree_ptr_; }
@@ -664,7 +665,7 @@ namespace xxmlxx {
         using value_type        = typename tree_type::value_type;
         using pointer           = typename tree_type::pointer;
         using reference         = typename tree_type::reference;
-        
+    public:
         ~document_tree_iterator() = default;
         constexpr document_tree_iterator(const document_tree_iterator&) = default;
         constexpr document_tree_iterator(document_tree_iterator&&) = default;
@@ -679,14 +680,14 @@ namespace xxmlxx {
         constexpr reference       operator[](std::size_t i) const { return const_cast<reference>(base::operator[](i)); }
 
         constexpr document_tree_iterator& operator++()                             { base::operator++(); return *this; }
-        constexpr document_tree_iterator  operator++(int)                          { return base::operator++(0); }
+        constexpr document_tree_iterator  operator++(int)                          { return static_cast<const document_tree_iterator&>(base::operator++(0)); }
         constexpr document_tree_iterator& operator+=(const std::ptrdiff_t d)       { base::operator+=(d); return *this; }
-        constexpr document_tree_iterator  operator+ (const std::ptrdiff_t d) const { return base::operator+(d); }
+        constexpr document_tree_iterator  operator+ (const std::ptrdiff_t d) const { return static_cast<const document_tree_iterator&>(base::operator+ (d)); }
 
         constexpr document_tree_iterator& operator--()                             { base::operator--(); return *this;  }
-        constexpr document_tree_iterator  operator--(int)                          { return base::operator--(0); }
+        constexpr document_tree_iterator  operator--(int)                          { return static_cast<const document_tree_iterator&>(base::operator--(0)); }
         constexpr document_tree_iterator& operator-=(const std::ptrdiff_t d)       { base::operator-=(d); return *this; }
-        constexpr document_tree_iterator  operator- (const std::ptrdiff_t d) const { return base::operator-(d); }
+        constexpr document_tree_iterator  operator- (const std::ptrdiff_t d) const { return static_cast<const document_tree_iterator&>(base::operator- (d)); }
 
         constexpr bool operator==(const document_tree_iterator& right) const { return base::operator==(right); }
         constexpr bool operator!=(const document_tree_iterator& right) const { return base::operator!=(right); }
@@ -732,6 +733,15 @@ namespace xxmlxx {
         constexpr document_tree_iterator insert(tree_node_category cat, std::string_view node_content,
             const typename value_type::allocator_type& alloc = typename value_type::allocator_type{}) {
             return document_tree_iterator(base::tree_ptr_, base::tree_ptr_->insert(cat, const_cast<pointer>(base::node_ptr_), node_content, alloc));
+        }
+
+        // Erase this iterator and all children related to this
+        // Return to last sibling.
+        // Be careful with erase cause' it could be very slow.
+        constexpr document_tree_iterator erase () {
+            auto sid = prev(1) - base::tree_ptr_->begin(); // Back to last sibling
+            base::tree_ptr_->erase(const_cast<pointer>(base::node_ptr_));
+            return base::tree_ptr_->begin() + sid;
         }
     }; 
 
@@ -784,7 +794,7 @@ namespace xxmlxx {
         }
 
         // Always use this if you can.
-        constexpr pointer insert(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+        constexpr pointer       insert(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
             return parent - data() >= nodes_.back().parent_id() ? emplace_node_back_(cat, parent, node_content, alloc) : insert_node_properly_(cat, parent, node_content, alloc);
         }
 
@@ -802,8 +812,20 @@ namespace xxmlxx {
 
         template <class Rule>
         constexpr const_pointer find(std::reverse_iterator<const_pointer> current, Rule rule) {
-            return std::ranges::find_if(current, std::reverse_iterator<const_pointer>(data()), rule).base() - 1;
-        } 
+            auto it = std::ranges::find_if(current, std::reverse_iterator<const_pointer>(data()), rule).base(); 
+            return it != data() ? it - 1 : data();
+        }
+
+        constexpr pointer       erase(pointer root) {
+            tag_nodes_to_unknow_(root);
+            auto pt = root;
+            for (; pt != data() + size();) {
+                if (pt->category() == tree_node_category::unknow) {
+                    pt = erase_one_node_(pt);
+                } else { ++pt; }
+            }
+            return pt;
+        }
         
         ///////////////////////////////////////////////////////////////////////
         ///                       XML Output Part                           ///
@@ -818,6 +840,7 @@ namespace xxmlxx {
             temp_string result_cache(max_file_characters, '\0', tmp_allocator);
             // A single root node doesn't require iterations.
             if (depth() == 0) {
+                destination = std::ranges::copy(std::string_view(R"(<?xml version="1.0" encoding="utf-8"?>)""\n"), destination).out;
                 return std::ranges::copy(result_cache.begin(),
                     data()->template format_to<details::document_tag_category::self>(result_cache.begin()), destination).out;
             }
@@ -857,18 +880,6 @@ namespace xxmlxx {
         }
         
     private:
-        constexpr pointer emplace_node_back_(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return &nodes_.emplace_back(data(), cat, static_cast<std::int32_t>(parent - data()), node_content, alloc);
-        }
-
-        constexpr pointer insert_node_properly_(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            const auto pid        = static_cast<std::int32_t>(parent - data());
-            const auto insert_pos = static_cast<std::int32_t>(std::upper_bound(data(), data() + size(), pid, upper_bound_rule) - data());
-            auto       update_it  = std::upper_bound(data(), data() + size(), static_cast<std::int32_t>(insert_pos - 1), upper_bound_rule);
-            std::ranges::for_each(update_it, data() + size(), [](auto& n) { ++n.parent_id(); });
-            return &*nodes_.emplace(nodes_.begin() + insert_pos, data(), cat, pid, node_content, alloc);
-        }
-        
         // To make to_string code more simple and clearer.
         template <details::document_tag_category Cat, class OutputIt>
         static constexpr auto emplace_cache_(const_reference node, OutputIt it, std::size_t depth) -> OutputIt {
@@ -880,6 +891,38 @@ namespace xxmlxx {
                 it = std::ranges::fill_n(it, depth << 1, ' ');
             }
             return node.template format_to<Cat>(it);
+        }
+        
+        constexpr pointer emplace_node_back_(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return &nodes_.emplace_back(data(), cat, static_cast<std::int32_t>(parent - data()), node_content, alloc);
+        }
+
+        constexpr pointer insert_node_properly_(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            const auto pid        = static_cast<std::int32_t>(parent - data());
+            const auto insert_pos = static_cast<std::int32_t>(std::upper_bound(data(), data() + size(), pid, upper_bound_rule) - data());
+            auto       update_it  = std::upper_bound(data(), data() + size(), static_cast<std::int32_t>(insert_pos - 1), upper_bound_rule);
+            std::ranges::for_each(update_it, data() + size(), [](auto& n) { ++n.parent_id(); });
+            return &*nodes_.emplace(nodes_.begin() + insert_pos, data(), cat, pid, node_content, alloc);
+        }
+
+        constexpr pointer erase_one_node_  (pointer dest) {
+            const auto did = static_cast<std::int32_t>(dest - data());
+            const auto dbg = std::upper_bound(data(), data() + size(), did - 1, upper_bound_rule);
+            std::ranges::for_each(dbg, data() + size(), [](auto& n) { --n.parent_id(); });
+            auto res = nodes_.erase(nodes_.begin() + did);
+            return res != nodes_.end() ? &*res : data() + size();
+        }
+
+        constexpr void   tag_nodes_to_unknow_(pointer root) {
+            root->category() = tree_node_category::unknow;
+            std::ranges::for_each(root + 1, data() + size(), [root, this](auto& node) {
+                auto trace_start = &node;
+                for (auto it = trace_start; it->parent_id() != -1; it = data() + it->parent_id()) {
+                    if (it->parent_id() == root - data()) {
+                        trace_start->category() = tree_node_category::unknow; break;
+                    }
+                }
+            });
         }
     };
 
