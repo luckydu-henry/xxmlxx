@@ -381,6 +381,14 @@ namespace xxmlxx {
     
     template <class StrAllocator>
     class tree_node {
+    public:
+        using allocator_type      = StrAllocator;
+        using string_type         = std::basic_string<char, std::char_traits<char>, StrAllocator>;
+        using pointer             = tree_node*;
+        using const_pointer       = const tree_node*;
+        using reference           = tree_node&;
+        using const_reference     = const tree_node&;
+    private:
         std::int32_t                                                          parent_index_ = 0;
         tree_node_category                                                    category_     = tree_node_category::unknow;
         std::uint8_t                                                          depth_        = 0;
@@ -415,15 +423,8 @@ namespace xxmlxx {
         }
         
     public:
-
-        using allocator_type         = StrAllocator;
-        using string_type            = std::basic_string<char, std::char_traits<char>, StrAllocator>;
-        using iterator               = tree_node*;
-        using const_iterator         = const tree_node*;
-        using reverse_iterator       = std::reverse_iterator<tree_node*>;
-        using const_reverse_iterator = const std::reverse_iterator<tree_node*>;
         
-        constexpr tree_node(iterator begin, tree_node_category cat, std::int32_t pid, std::string_view node_content, const StrAllocator& allocator)
+        constexpr tree_node(pointer begin, tree_node_category cat, std::int32_t pid, std::string_view node_content, const StrAllocator& allocator)
             : parent_index_(pid), category_(cat), depth_(0), buffer_(allocator){
             buffer_.reserve(256);
             buffer_.assign(node_content);
@@ -442,7 +443,7 @@ namespace xxmlxx {
         
         constexpr tree_node_category category()  const { return category_; }
 
-        constexpr iterator           fill_buffer(std::string_view s) {
+        constexpr pointer           fill_buffer(std::string_view s) {
             buffer_.assign(s);
             return this;
         }
@@ -462,7 +463,7 @@ namespace xxmlxx {
             return {};
         }
 
-        constexpr iterator           attribute(std::string_view k, std::string_view v) {
+        constexpr pointer           attribute(std::string_view k, std::string_view v) {
             if (category_ == tree_node_category::element) [[likely]] {
                 if (std::size_t id = find_attribute_(k); id != std::string_view::npos) {
                     replace_attribute_(id, v);
@@ -482,14 +483,14 @@ namespace xxmlxx {
             return {};
         }
 
-        constexpr iterator           text(std::string_view s) {
+        constexpr pointer           text(std::string_view s) {
             if (category_ == tree_node_category::text) [[likely]] {
                 return fill_buffer(s);
             }
             return this;
         }
 
-        constexpr iterator           comment(std::string_view s) {
+        constexpr pointer           comment(std::string_view s) {
             if (category_ == tree_node_category::comment) [[likely]] {
                 return fill_buffer(s);
             }
@@ -531,77 +532,136 @@ namespace xxmlxx {
         }
     };
 
+    template <class DocTree>
+    class document_tree_iterator {
+    public:
+        using pointer         = typename DocTree::pointer;
+        using reference       = typename DocTree::reference;
+        using const_pointer   = typename DocTree::const_pointer;
+        using const_reference = typename DocTree::const_reference;
+    }; 
+
     template <class StrAllocator = std::allocator<char>, class VecAllocator = std::allocator<tree_node<StrAllocator>>>
     class document_tree {
         std::vector<tree_node<StrAllocator>, VecAllocator> nodes_;
     public:
         using node_type              = tree_node<StrAllocator>;
         using allocator_type         = VecAllocator;
-        using iterator               = typename node_type::iterator;
-        using const_iterator         = typename node_type::const_iterator;
-        using reverse_iterator       = typename node_type::reverse_iterator;
-        using const_reverse_iterator = typename node_type::const_reverse_iterator;
-        
+        using pointer                = typename node_type::pointer;
+        using const_pointer          = typename node_type::const_pointer;
+        using reference              = typename node_type::reference;
+        using const_reference        = typename node_type::const_reference;
+
+        using iterator               = document_tree_iterator<StrAllocator>;
+        using const_iterator         = const iterator;
+        using reverse_iterator       = std::reverse_iterator<iterator>;
+        using const_reverse_iterator = const reverse_iterator;
+
+        static constexpr auto upper_bound_rule = [](std::int32_t id, const node_type& node) {
+            return id < node.parent_id();
+        };
+
         constexpr document_tree(std::string_view name, std::size_t init_cap = 1024, const StrAllocator& str_alloc = StrAllocator{}, const VecAllocator& alloc = VecAllocator{})
             : nodes_(alloc) {
             nodes_.reserve(init_cap);
             nodes_.emplace_back(nullptr, tree_node_category::element, -1 , name, str_alloc);
         }
         
-        constexpr iterator       begin()        { return &nodes_.front(); }
-        constexpr iterator       end()          { return &nodes_.back() + 1; }
-        constexpr const_iterator begin()  const { return &nodes_.front(); }
-        constexpr const_iterator end()    const { return &nodes_.back() + 1; }
-        constexpr const_iterator cbegin() const { return begin(); }
-        constexpr const_iterator cend()   const { return end();   }
+        // constexpr iterator       begin()        { return &nodes_.front(); }
+        // constexpr iterator       end()          { return &nodes_.back() + 1; }
+        // constexpr const_iterator begin()  const { return &nodes_.front(); }
+        // constexpr const_iterator end()    const { return &nodes_.back() + 1; }
+        // constexpr const_iterator cbegin() const { return begin(); }
+        // constexpr const_iterator cend()   const { return end();   }
+        //
+        // constexpr reverse_iterator       rbegin()        { return const_reverse_iterator(end()); }
+        // constexpr reverse_iterator       rend()          { return const_reverse_iterator(begin()); }
+        // constexpr const_reverse_iterator rbegin()  const { return const_reverse_iterator(end()); }
+        // constexpr const_reverse_iterator rend()    const { return const_reverse_iterator(begin()); }
+        // constexpr const_reverse_iterator crbegin() const { return rbegin(); }
+        // constexpr const_reverse_iterator crend()   const { return rend(); }
 
-        constexpr reverse_iterator       rbegin()        { return const_reverse_iterator(end()); }
-        constexpr reverse_iterator       rend()          { return const_reverse_iterator(begin()); }
-        constexpr const_reverse_iterator rbegin()  const { return const_reverse_iterator(end()); }
-        constexpr const_reverse_iterator rend()    const { return const_reverse_iterator(begin()); }
-        constexpr const_reverse_iterator crbegin() const { return rbegin(); }
-        constexpr const_reverse_iterator crend()   const { return rend(); }
+        constexpr pointer       data()       { return &nodes_.front(); }
+        constexpr const_pointer data() const { return &nodes_.front(); }
+        constexpr std::size_t   size()      const { return nodes_.size(); }
 
-        constexpr std::size_t size()      const { return nodes_.size(); }
         
-        constexpr std::size_t depth() const {
-            return std::ranges::max_element(*this, [this](const auto& a, const auto& b) { return a.depth() < b.depth(); })->depth();
+        constexpr std::size_t   depth() const {
+            return std::ranges::max_element(data(), data() + size(), [](const auto& a, const auto& b) { return a.depth() < b.depth(); })->depth();
         }
 
         // Only use this when you are sure the node you are trying to push has the greatest parent id.
-        constexpr iterator emplace(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return &nodes_.emplace_back(begin(), cat, static_cast<std::int32_t>(parent - begin()), node_content, alloc);
-        }
-
-        constexpr iterator emplace(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return emplace(cat, begin(), node_content, alloc);
+        constexpr pointer emplace(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return &nodes_.emplace_back(data(), cat, static_cast<std::int32_t>(parent - data()), node_content, alloc);
         }
 
         // View vector as a special heap, where all elements are sorted and related differences are maintained.
         // Guarantee order safety but can be slow.
-        constexpr iterator push(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            auto compare = [](int32_t id, const node_type& node) {
-                return id < node.parent_id();
-            };
-            const auto pid        = static_cast<std::int32_t>(parent - begin());
-            const auto insert_pos = static_cast<std::int32_t>(std::upper_bound(begin(), end(), pid, compare) - begin());
-            auto       update_it  = std::upper_bound(begin(), end(), static_cast<std::int32_t>(insert_pos - 1), compare);
-            std::ranges::for_each_n(update_it, end() - update_it, [](auto& n) { ++n.parent_id(); });
-            return &*nodes_.emplace(nodes_.begin() + insert_pos, begin(), cat, pid, node_content, alloc);
-        }
-
-        constexpr iterator push(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return push(cat, begin(), node_content, alloc);
+        constexpr pointer push(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            const auto pid        = static_cast<std::int32_t>(parent - data());
+            const auto insert_pos = static_cast<std::int32_t>(std::upper_bound(data(), data() + size(), pid, upper_bound_rule) - data());
+            auto       update_it  = std::upper_bound(data(), data() + size(), static_cast<std::int32_t>(insert_pos - 1), upper_bound_rule);
+            std::ranges::for_each(update_it, data() + size(), [](auto& n) { ++n.parent_id(); });
+            return &*nodes_.emplace(nodes_.begin() + insert_pos, data(), cat, pid, node_content, alloc);
         }
 
         // Always use this if you can.
-        constexpr iterator insert(tree_node_category cat, iterator parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return parent - begin() >= rbegin()->parent_id() ? emplace(cat, parent, node_content, alloc) : push(cat, parent, node_content, alloc);
+        constexpr pointer insert(tree_node_category cat, pointer parent, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
+            return parent - data() >= nodes_.back().parent_id() ? emplace(cat, parent, node_content, alloc) : push(cat, parent, node_content, alloc);
         }
 
-        constexpr iterator insert(tree_node_category cat, std::string_view node_content, const StrAllocator& alloc = StrAllocator{}) {
-            return insert(cat, begin(), node_content, alloc);
+        // Using binary_search to search the first child node of current.
+        constexpr const_pointer search_first(const_pointer current) const {
+            const auto pid = static_cast<std::int32_t>(current - data());
+            return std::upper_bound(current, data() + size(), pid - 1, upper_bound_rule);
         }
+
+        // Using binary_search to search the first child node of current.
+        constexpr pointer       search_first(const_pointer current) {
+            return const_cast<pointer>(const_cast<const document_tree*>(this)->search_first(current));
+        }
+
+        // Find sibling with rule using linear search.
+        template <class Rule>
+        constexpr const_pointer find(const_pointer current, Rule rule) const {
+            return std::ranges::find_if(current, data() + size(), rule);
+        }
+
+        // Find sibling with rule using linear search.
+        template <class Rule>
+        constexpr pointer       find(pointer current, Rule rule) {
+            return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, rule));
+        }
+
+        // // Find nth sibling node.
+        // constexpr const_pointer find(const_pointer current, std::size_t n) const {
+        //     return find_if(current, finder_by_index_impl{n, current});
+        // }
+        //
+        // // Find nth sibling node.
+        // constexpr pointer       find(const_pointer current, std::size_t n) {
+        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, n));
+        // }
+        //
+        // // Find first sibling node with name.
+        // constexpr const_pointer find(const_pointer current, std::string_view name) const {
+        //     return find_if(current, finder_by_name_impl{ name, current });
+        // }
+        //
+        // // Find first sibling node with name.
+        // constexpr pointer       find(const_pointer current, std::string_view name) {
+        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, name));
+        // }
+        //
+        // // Find first sibling node with category 
+        // constexpr const_pointer find(const_pointer current, tree_node_category cat) const {
+        //     return find_if(current, finder_by_category_impl{cat, current});
+        // }
+        //
+        // // Find first sibling node with category
+        // constexpr pointer       find(const_pointer current, tree_node_category cat) {
+        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, cat));
+        // }
 
         ///////////////////////////////////////////////////////////////////////
         ///                       XML Output Part                           ///
@@ -617,12 +677,12 @@ namespace xxmlxx {
             // A single root node doesn't require iterations.
             if (depth() == 0) {
                 return std::ranges::copy(result_cache.begin(),
-                    begin()->template format_to<details::document_tag_category::self>(result_cache.begin()), destination).out;
+                    data()->template format_to<details::document_tag_category::self>(result_cache.begin()), destination).out;
             }
             typename temp_string::iterator cache_it = result_cache.begin();
             std::vector<temp_string, DenseAllocator> node_string_dense(nodes_.size(), dense_allocator);
             for (std::size_t i = depth(); i != 0; --i) {
-                auto                     same_depth_view = *this | std::views::filter([i, this](auto& e) { return e.depth() == i; });
+                auto                     same_depth_view = std::ranges::subrange(data(), data() + size()) | std::views::filter([i](auto& e) { return e.depth() == i; });
                 auto                     parent_ids_view = same_depth_view | std::views::transform([](auto& e) { return e.parent_id(); });
                 for (auto parent_id : parent_ids_view) {
                     if (node_string_dense[parent_id].empty()) {
@@ -630,10 +690,10 @@ namespace xxmlxx {
                         // Must have this same_parent_view cache or compile won't success.
                         auto same_parent_view = same_depth_view | std::views::filter([parent_id](auto& e) { return e.parent_id() == parent_id; }); 
                         for (auto& j : same_parent_view) {
-                            if (node_string_dense[&j - begin()].empty()) {
+                            if (node_string_dense[&j - data()].empty()) {
                                 cache_it = emplace_cache_<details::document_tag_category::self>(j, cache_it, i);
                             } else {
-                                auto& cache = node_string_dense[&j - begin()];
+                                auto& cache = node_string_dense[&j - data()];
                                 std::memcpy(&*cache_it, cache.data(), cache.size()); cache_it += cache.size();
                             }
                         }
@@ -781,7 +841,7 @@ namespace xxmlxx {
             return parser_segment_iterator("Root node (first node) can not be comment or anything else!");
         }
         // Add root first because our tree doesn't support pushing root after construction.
-        tree_mem.begin()->fill_buffer(current_segment->buffer);
+        tree_mem.data()->fill_buffer(current_segment->buffer);
         segment_stack[++stack_top] = 0;
         
         for (++current_segment; current_segment != parser_segment_iterator(); ++current_segment) {
@@ -790,19 +850,19 @@ namespace xxmlxx {
             }
             switch (current_segment->category) {
             case details::document_tag_category::text:
-                tree_mem.insert(tree_node_category::text, tree_mem.begin() + segment_stack[stack_top], current_segment->buffer, tree_mem.begin()->get_allocator()); break;
+                tree_mem.insert(tree_node_category::text, tree_mem.data() + segment_stack[stack_top], current_segment->buffer, tree_mem.data()->get_allocator()); break;
             case details::document_tag_category::comment: break;
             case details::document_tag_category::open:
                 segment_stack[++stack_top] = static_cast<std::int32_t>(
-                    tree_mem.insert(tree_node_category::element, tree_mem.begin() + segment_stack[stack_top],
-                   current_segment->buffer, tree_mem.begin()->get_allocator()) - tree_mem.begin()); break;
+                    tree_mem.insert(tree_node_category::element, tree_mem.data() + segment_stack[stack_top],
+                   current_segment->buffer, tree_mem.data()->get_allocator()) - tree_mem.data()); break;
             case details::document_tag_category::close:
-                if (current_segment->buffer != (tree_mem.begin() + segment_stack[stack_top])->name()) {
+                if (current_segment->buffer != (tree_mem.data() + segment_stack[stack_top])->name()) {
                     return parser_segment_iterator("Unmatched element!"); 
                 } --stack_top; break;
             case details::document_tag_category::self:
-                tree_mem.insert(tree_node_category::element, tree_mem.begin() + segment_stack[stack_top],
-                    current_segment->buffer, tree_mem.begin()->get_allocator()); break;
+                tree_mem.insert(tree_node_category::element, tree_mem.data() + segment_stack[stack_top],
+                    current_segment->buffer, tree_mem.data()->get_allocator()); break;
             case details::document_tag_category::unknow:
                 return parser_segment_iterator("Not a valid segment type");
             }
