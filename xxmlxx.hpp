@@ -585,7 +585,71 @@ namespace xxmlxx {
 
         constexpr std::ptrdiff_t                      operator-(const document_tree_const_iterator& rhs) const { return node_ptr_ - rhs.node_ptr_; }
         constexpr friend document_tree_const_iterator operator+(const std::ptrdiff_t d, const document_tree_const_iterator& it) { return it + d; }
-        
+
+        constexpr pointer ptr() const { return node_ptr_; }
+
+        // Node related operations.
+        constexpr std::string_view attribute(std::string_view k) const { return node_ptr_->attribute(k); }
+        constexpr std::string_view text     ()                   const { return node_ptr_->text();       }
+        constexpr std::string_view comment  ()                   const { return node_ptr_->comment();    }
+        constexpr std::string_view buffer   ()                   const { return node_ptr_->buffer();     }
+
+        // Tree related operations.
+        constexpr document_tree_const_iterator rise()                    const { return document_tree_const_iterator(tree_ptr_, tree_ptr_->data() + node_ptr_->parent_id()); }
+        constexpr document_tree_const_iterator dive()                    const { return document_tree_const_iterator(tree_ptr_, tree_ptr_->search(node_ptr_)); }
+        constexpr document_tree_const_iterator next(std::size_t n)       const { 
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_, [&n, this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (n > 0) { --n; return false; }
+                    return true;
+                } return false;
+            }));
+        }
+
+        constexpr document_tree_const_iterator next(std::string_view n)   const { 
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_, [n, this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (n == d.name()) { return true; }
+                    return false;
+                } return false;
+            }));
+        }
+
+        constexpr document_tree_const_iterator next()                     const {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_ + 1, [this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (node_ptr_->name() == d.name()) { return true; }
+                    return false;
+                } return false;
+            }));
+        }
+
+        constexpr document_tree_const_iterator prev(std::size_t n)       const { 
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_ + 1), [&n, this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (n > 0) { --n; return false; }
+                    return true;
+                } return false;
+            }));
+        }
+
+        constexpr document_tree_const_iterator prev(std::string_view n)   const { 
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_ + 1), [n, this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (n == d.name()) { return true; }
+                    return false;
+                } return false;
+            }));
+        }
+
+        constexpr document_tree_const_iterator prev()                     const {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_), [this](const auto& d) {
+                if (d.parent_id() == node_ptr_->parent_id()) {
+                    if (node_ptr_->name() == d.name()) { return true; }
+                    return false;
+                } return false;
+            }));
+        }
     };
     
     template <class DocTree>
@@ -633,6 +697,42 @@ namespace xxmlxx {
         
         constexpr std::ptrdiff_t                operator-(const document_tree_iterator& rhs) const { return base::operator-(rhs); }
         constexpr friend document_tree_iterator operator+(const std::ptrdiff_t d, const document_tree_iterator& it) { return it + d; }
+
+        constexpr pointer ptr() const { return const_cast<pointer>(base::ptr()); }
+
+        // Node related operations.
+        constexpr std::string_view attribute(std::string_view k) const { return  base::attribute(k); }
+        constexpr std::string_view text     ()                   const { return  base::text();       }
+        constexpr std::string_view comment  ()                   const { return  base::comment();    }
+        constexpr std::string_view buffer   ()                   const { return  base::buffer();     }
+
+        constexpr document_tree_iterator attribute(std::string_view k, std::string_view v) {
+            return document_tree_iterator(base::tree_ptr_, const_cast<pointer>(base::node_ptr_)->attribute(k, v));
+        }
+        constexpr document_tree_iterator text     (std::string_view k) {
+            return document_tree_iterator(base::tree_ptr_, const_cast<pointer>(base::node_ptr_)->text(k));
+        }
+        constexpr document_tree_iterator comment  (std::string_view k) {
+            return document_tree_iterator(base::tree_ptr_, const_cast<pointer>(base::node_ptr_)->comment(k));
+        }
+        constexpr document_tree_iterator buffer   (std::string_view k) {
+            return document_tree_iterator(base::tree_ptr_, const_cast<pointer>(base::node_ptr_)->buffer(k));
+        }
+
+        // Tree related operations.
+        constexpr document_tree_iterator rise()                   const { return static_cast<const document_tree_iterator&>(base::rise()); }
+        constexpr document_tree_iterator dive()                   const { return static_cast<const document_tree_iterator&>(base::dive()); }
+        constexpr document_tree_iterator next(std::size_t n)      const { return static_cast<const document_tree_iterator&>(base::next(n)); }
+        constexpr document_tree_iterator next(std::string_view n) const { return static_cast<const document_tree_iterator&>(base::next(n)); }
+        constexpr document_tree_iterator next()                   const { return static_cast<const document_tree_iterator&>(base::next()); }
+        constexpr document_tree_iterator prev(std::size_t n)      const { return static_cast<const document_tree_iterator&>(base::prev(n)); }
+        constexpr document_tree_iterator prev(std::string_view n) const { return static_cast<const document_tree_iterator&>(base::prev(n)); }
+        constexpr document_tree_iterator prev()                   const { return static_cast<const document_tree_iterator&>(base::prev()); }
+
+        constexpr document_tree_iterator insert(tree_node_category cat, std::string_view node_content,
+            const typename value_type::allocator_type& alloc = typename value_type::allocator_type{}) {
+            return document_tree_iterator(base::tree_ptr_, base::tree_ptr_->insert(cat, const_cast<pointer>(base::node_ptr_), node_content, alloc));
+        }
     }; 
 
     template <class StrAllocator = std::allocator<char>, class VecAllocator = std::allocator<tree_node<StrAllocator>>>
@@ -693,54 +793,18 @@ namespace xxmlxx {
             const auto pid = static_cast<std::int32_t>(current - data());
             return std::upper_bound(current, data() + size(), pid - 1, upper_bound_rule);
         }
-
-        // Using binary_search to search the first child node of current.
-        constexpr pointer       search(const_pointer current) {
-            return const_cast<pointer>(const_cast<const document_tree*>(this)->search(current));
-        }
-
+        
         // Find sibling with rule using linear search.
         template <class Rule>
         constexpr const_pointer find(const_pointer current, Rule rule) const {
             return std::ranges::find_if(current, data() + size(), rule);
         }
 
-        // Find sibling with rule using linear search.
         template <class Rule>
-        constexpr pointer       find(pointer current, Rule rule) {
-            return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, rule));
-        }
-
-        // // Find nth sibling node.
-        // constexpr const_pointer find(const_pointer current, std::size_t n) const {
-        //     return find_if(current, finder_by_index_impl{n, current});
-        // }
-        //
-        // // Find nth sibling node.
-        // constexpr pointer       find(const_pointer current, std::size_t n) {
-        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, n));
-        // }
-        //
-        // // Find first sibling node with name.
-        // constexpr const_pointer find(const_pointer current, std::string_view name) const {
-        //     return find_if(current, finder_by_name_impl{ name, current });
-        // }
-        //
-        // // Find first sibling node with name.
-        // constexpr pointer       find(const_pointer current, std::string_view name) {
-        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, name));
-        // }
-        //
-        // // Find first sibling node with category 
-        // constexpr const_pointer find(const_pointer current, tree_node_category cat) const {
-        //     return find_if(current, finder_by_category_impl{cat, current});
-        // }
-        //
-        // // Find first sibling node with category
-        // constexpr pointer       find(const_pointer current, tree_node_category cat) {
-        //     return const_cast<pointer>(const_cast<const document_tree*>(this)->find(current, cat));
-        // }
-
+        constexpr const_pointer find(std::reverse_iterator<const_pointer> current, Rule rule) {
+            return std::ranges::find_if(current, std::reverse_iterator<const_pointer>(data()), rule).base() - 1;
+        } 
+        
         ///////////////////////////////////////////////////////////////////////
         ///                       XML Output Part                           ///
         ///////////////////////////////////////////////////////////////////////
