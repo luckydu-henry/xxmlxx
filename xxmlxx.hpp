@@ -662,7 +662,10 @@ namespace xxmlxx {
         using value_type        = typename tree_type::value_type;
         using pointer           = typename tree_type::pointer;
         using reference         = typename tree_type::reference;
-        
+    private:
+        constexpr document_tree_iterator(const document_tree_const_iterator<DocTree>& right)
+            : base(right) {}
+    public:
         ~document_tree_iterator() = default;
         constexpr document_tree_iterator(const document_tree_iterator&) = default;
         constexpr document_tree_iterator(document_tree_iterator&&) = default;
@@ -677,14 +680,14 @@ namespace xxmlxx {
         constexpr reference       operator[](std::size_t i) const { return const_cast<reference>(base::operator[](i)); }
 
         constexpr document_tree_iterator& operator++()                             { base::operator++(); return *this; }
-        constexpr document_tree_iterator  operator++(int)                          { return static_cast<const document_tree_iterator&>(base::operator++(0)); }
+        constexpr document_tree_iterator  operator++(int)                          { return base::operator++(0); }
         constexpr document_tree_iterator& operator+=(const std::ptrdiff_t d)       { base::operator+=(d); return *this; }
-        constexpr document_tree_iterator  operator+ (const std::ptrdiff_t d) const { return static_cast<const document_tree_iterator&>(base::operator+ (d)); }
+        constexpr document_tree_iterator  operator+ (const std::ptrdiff_t d) const { return base::operator+ (d); }
 
         constexpr document_tree_iterator& operator--()                             { base::operator--(); return *this;  }
-        constexpr document_tree_iterator  operator--(int)                          { return static_cast<const document_tree_iterator&>(base::operator--(0)); }
+        constexpr document_tree_iterator  operator--(int)                          { return base::operator--(0); }
         constexpr document_tree_iterator& operator-=(const std::ptrdiff_t d)       { base::operator-=(d); return *this; }
-        constexpr document_tree_iterator  operator- (const std::ptrdiff_t d) const { return static_cast<const document_tree_iterator&>(base::operator- (d)); }
+        constexpr document_tree_iterator  operator- (const std::ptrdiff_t d) const { return base::operator- (d); }
 
         constexpr bool operator==(const document_tree_iterator& right) const { return base::operator==(right); }
         constexpr bool operator!=(const document_tree_iterator& right) const { return base::operator!=(right); }
@@ -718,14 +721,14 @@ namespace xxmlxx {
         }
 
         // Tree related operations.
-        constexpr document_tree_iterator rise()                   const { return static_cast<const document_tree_iterator&>(base::rise()); }
-        constexpr document_tree_iterator dive()                   const { return static_cast<const document_tree_iterator&>(base::dive()); }
-        constexpr document_tree_iterator next(std::size_t n)      const { return static_cast<const document_tree_iterator&>(base::next(n)); }
-        constexpr document_tree_iterator next(std::string_view n) const { return static_cast<const document_tree_iterator&>(base::next(n)); }
-        constexpr document_tree_iterator next()                   const { return static_cast<const document_tree_iterator&>(base::next()); }
-        constexpr document_tree_iterator prev(std::size_t n)      const { return static_cast<const document_tree_iterator&>(base::prev(n)); }
-        constexpr document_tree_iterator prev(std::string_view n) const { return static_cast<const document_tree_iterator&>(base::prev(n)); }
-        constexpr document_tree_iterator prev()                   const { return static_cast<const document_tree_iterator&>(base::prev()); }
+        constexpr document_tree_iterator rise()                   const { return base::rise(); }
+        constexpr document_tree_iterator dive()                   const { return base::dive(); }
+        constexpr document_tree_iterator next(std::size_t n)      const { return base::next(n); }
+        constexpr document_tree_iterator next(std::string_view n) const { return base::next(n); }
+        constexpr document_tree_iterator next()                   const { return base::next(); }
+        constexpr document_tree_iterator prev(std::size_t n)      const { return base::prev(n); }
+        constexpr document_tree_iterator prev(std::string_view n) const { return base::prev(n); }
+        constexpr document_tree_iterator prev()                   const { return base::prev(); }
 
         constexpr document_tree_iterator insert(tree_node_category cat, std::string_view node_content,
             const typename value_type::allocator_type& alloc = typename value_type::allocator_type{}) {
