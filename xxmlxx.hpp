@@ -1,3 +1,26 @@
+//
+// MIT License
+//
+// Copyright (c) 2025 Henry Du
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
 #pragma once
 
 #include <vector>
@@ -314,7 +337,6 @@ namespace xxmlxx {
 
             template <class Context>
             constexpr      parser_result<result_type> operator()(std::string_view input, Context& ctx) const {
-                
                 for (auto res = parse_attribute(input, ctx);
                     res;
                     res = parse_attribute(input, ctx)) {
@@ -400,8 +422,7 @@ namespace xxmlxx {
                 if (buffer_[id + key.size()] == '=' && buffer_[id + key.size() + 1] == '\"') {
                     return id + key.size() + 2;
                 }
-            }
-            return std::string_view::npos;
+            } return std::string_view::npos;
         }
 
         constexpr void                 replace_attribute_(std::size_t off, std::string_view new_val) {
@@ -438,67 +459,45 @@ namespace xxmlxx {
         constexpr tree_node& operator=(tree_node&&) = default;
         constexpr ~tree_node() = default;
 
-        constexpr std::int32_t       parent_id() const { return parent_index_; }
-        constexpr std::int32_t&      parent_id()       { return parent_index_; }
-        
-        constexpr tree_node_category   category()  const { return category_; }
-        constexpr tree_node_category&  category()        { return category_; }
-
-        constexpr pointer           buffer(std::string_view s) {
-            buffer_.assign(s);
-            return this;
-        }
-
-        constexpr std::string_view  buffer() const {
-            return buffer_;
-        }
-
-        constexpr auto               get_allocator() const { return buffer_.get_allocator(); }
-        
-        constexpr std::size_t        depth() const {
-            return static_cast<std::size_t>(depth_);
-        }
+        // Member getter and setter
+        constexpr std::int32_t         parent_id()     const { return parent_index_; }
+        constexpr std::int32_t&        parent_id()           { return parent_index_; }
+        constexpr tree_node_category   category()      const { return category_; }
+        constexpr tree_node_category&  category()            { return category_; }
+        constexpr string_type&         buffer()              { return buffer_; }
+        constexpr auto                 get_allocator() const { return buffer_.get_allocator(); }
+        constexpr std::uint8_t         depth()         const { return depth_; }
+        constexpr std::uint8_t&        depth()               { return depth_; }
 
         constexpr std::string_view   name() const {
             if (category_ == tree_node_category::element) [[likely]] {
                 const std::size_t       first_space  = buffer_.find(' ');
                 const std::size_t       length       = first_space == std::string_view::npos ? buffer_.size() : first_space;
                 return std::string_view(buffer_.data(), length);
-            }
-            return {};
+            } return {};
         }
 
         constexpr pointer           attribute(std::string_view k, std::string_view v) {
             if (category_ == tree_node_category::element) [[likely]] {
                 if (std::size_t id = find_attribute_(k); id != std::string_view::npos) {
                     replace_attribute_(id, v);
-                } else {
-                    push_attribute_(k, v);
-                }
-            }
-            return this;
+                } else { push_attribute_(k, v); }
+            } return this;
         }
 
         constexpr std::string_view   attribute(std::string_view k) const {
             if (category_ == tree_node_category::element) [[likely]] {
-                if (auto id = find_attribute_(k); id != std::string_view::npos) {
-                    return get_attribute_(id);
-                }
-            }
-            return {};
+                if (auto id = find_attribute_(k); id != std::string_view::npos) { return get_attribute_(id); }
+            } return {};
         }
 
         constexpr pointer           text(std::string_view s) {
-            if (category_ == tree_node_category::text) [[likely]] {
-                return buffer(s);
-            }
+            if (category_ == tree_node_category::text) [[likely]] { return buffer(s); }
             return this;
         }
 
         constexpr pointer           comment(std::string_view s) {
-            if (category_ == tree_node_category::comment) [[likely]] {
-                return buffer(s);
-            }
+            if (category_ == tree_node_category::comment) [[likely]] { return buffer(s); }
             return this;
         }
 
@@ -532,11 +531,9 @@ namespace xxmlxx {
                 if constexpr (TagCat == details::document_tag_category::open || TagCat == details::document_tag_category::self) {
                     return std::format_to(it, "<!--{:s}-->\n",   buffer_);
                 } break;
-            }
-            return std::format_to(it, "\n");
+            } return it;
         }
     };
-
 
     template <class DocTree>
     class document_tree_const_iterator {
@@ -597,9 +594,9 @@ namespace xxmlxx {
 
         // Tree related operations.
         constexpr document_tree_const_iterator rise()                    const { return document_tree_const_iterator(tree_ptr_, tree_ptr_->data() + node_ptr_->parent_id()); }
-        constexpr document_tree_const_iterator dive()                    const { return document_tree_const_iterator(tree_ptr_, tree_ptr_->search(node_ptr_)); }
+        constexpr document_tree_const_iterator dive()                    const { return document_tree_const_iterator(tree_ptr_, tree_ptr_->search_first_child(node_ptr_)); }
         constexpr document_tree_const_iterator next(std::size_t n)       const { 
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_, [&n, this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(node_ptr_, [&n, this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (n > 0) { --n; return false; }
                     return true;
@@ -608,7 +605,7 @@ namespace xxmlxx {
         }
 
         constexpr document_tree_const_iterator next(std::string_view n)   const { 
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_, [n, this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(node_ptr_, [n, this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (n == d.name()) { return true; }
                     return false;
@@ -617,7 +614,7 @@ namespace xxmlxx {
         }
 
         constexpr document_tree_const_iterator next()                     const {
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(node_ptr_ + 1, [this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(node_ptr_ + 1, [this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (node_ptr_->name() == d.name()) { return true; }
                     return false;
@@ -626,7 +623,7 @@ namespace xxmlxx {
         }
 
         constexpr document_tree_const_iterator prev(std::size_t n)       const { 
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_ + 1), [&n, this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(std::make_reverse_iterator(node_ptr_ + 1), [&n, this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (n > 0) { --n; return false; }
                     return true;
@@ -635,7 +632,7 @@ namespace xxmlxx {
         }
 
         constexpr document_tree_const_iterator prev(std::string_view n)   const { 
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_ + 1), [n, this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(std::make_reverse_iterator(node_ptr_ + 1), [n, this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (n == d.name()) { return true; }
                     return false;
@@ -644,7 +641,7 @@ namespace xxmlxx {
         }
 
         constexpr document_tree_const_iterator prev()                     const {
-            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find(std::make_reverse_iterator(node_ptr_), [this](const auto& d) {
+            return document_tree_const_iterator(tree_ptr_, tree_ptr_->find_first_sibling(std::make_reverse_iterator(node_ptr_), [this](const auto& d) {
                 if (d.parent_id() == node_ptr_->parent_id()) {
                     if (node_ptr_->name() == d.name()) { return true; }
                     return false;
@@ -665,7 +662,7 @@ namespace xxmlxx {
         using value_type        = typename tree_type::value_type;
         using pointer           = typename tree_type::pointer;
         using reference         = typename tree_type::reference;
-    public:
+        
         ~document_tree_iterator() = default;
         constexpr document_tree_iterator(const document_tree_iterator&) = default;
         constexpr document_tree_iterator(document_tree_iterator&&) = default;
@@ -735,7 +732,7 @@ namespace xxmlxx {
             return document_tree_iterator(base::tree_ptr_, base::tree_ptr_->insert(cat, const_cast<pointer>(base::node_ptr_), node_content, alloc));
         }
 
-        // Erase this iterator and all children related to this
+        // Erase this iterator with all children related to it
         // Return to last sibling.
         // Be careful with erase cause' it could be very slow.
         constexpr document_tree_iterator erase () {
@@ -765,10 +762,10 @@ namespace xxmlxx {
             return id < node.parent_id();
         };
 
-        constexpr document_tree(std::string_view name, std::size_t init_cap = 1024, const StrAllocator& str_alloc = StrAllocator{}, const VecAllocator& alloc = VecAllocator{})
+        constexpr document_tree(std::string_view node_content = "", std::size_t init_cap = 1024, const StrAllocator& str_alloc = StrAllocator{}, const VecAllocator& alloc = VecAllocator{})
             : nodes_(alloc) {
             nodes_.reserve(init_cap);
-            nodes_.emplace_back(nullptr, tree_node_category::element, -1 , name, str_alloc);
+            nodes_.emplace_back(nullptr, tree_node_category::element, -1 , node_content, str_alloc);
         }
         
         constexpr decltype(auto)   begin()         { return iterator(this, nodes_.data());        }
@@ -799,32 +796,31 @@ namespace xxmlxx {
         }
 
         // Using binary_search to search the first child node of current.
-        constexpr const_pointer search(const_pointer current) const {
+        constexpr const_pointer search_first_child(const_pointer current) const {
             const auto pid = static_cast<std::int32_t>(current - data());
             return std::upper_bound(current, data() + size(), pid - 1, upper_bound_rule);
         }
         
         // Find sibling with rule using linear search.
         template <class Rule>
-        constexpr const_pointer find(const_pointer current, Rule rule) const {
+        constexpr const_pointer find_first_sibling(const_pointer current, Rule rule) const {
             return std::ranges::find_if(current, data() + size(), rule);
         }
 
         template <class Rule>
-        constexpr const_pointer find(std::reverse_iterator<const_pointer> current, Rule rule) {
+        constexpr const_pointer find_first_sibling(std::reverse_iterator<const_pointer> current, Rule rule) {
             auto it = std::ranges::find_if(current, std::reverse_iterator<const_pointer>(data()), rule).base(); 
             return it != data() ? it - 1 : data();
         }
 
+        // Erase current node and all its children
+        // Notice root node would never be erased even though you pass in data().
         constexpr pointer       erase(pointer root) {
-            tag_nodes_to_unknow_(root);
-            auto pt = root;
-            for (; pt != data() + size();) {
-                if (pt->category() == tree_node_category::unknow) {
-                    pt = erase_one_node_(pt);
-                } else { ++pt; }
+            if (root == data()) {
+                nodes_.erase(nodes_.begin() + 1, nodes_.end());
+                return data();
             }
-            return pt;
+            return erase_current_with_all_children_(root);
         }
         
         ///////////////////////////////////////////////////////////////////////
@@ -905,7 +901,16 @@ namespace xxmlxx {
             return &*nodes_.emplace(nodes_.begin() + insert_pos, data(), cat, pid, node_content, alloc);
         }
 
-        constexpr pointer erase_one_node_  (pointer dest) {
+        constexpr pointer erase_current_with_all_children_(pointer root) {
+            tag_tomb_nodes_to_unknow_(root);
+            auto pt = root;
+            for (;pt != data() + size(); ++pt) {
+                if (pt->category() == tree_node_category::unknow) { pt = erase_single_node_and_rotate_(pt); --pt; }
+            }
+            return pt;
+        }
+
+        constexpr pointer erase_single_node_and_rotate_  (pointer dest) {
             const auto did = static_cast<std::int32_t>(dest - data());
             const auto dbg = std::upper_bound(data(), data() + size(), did - 1, upper_bound_rule);
             std::ranges::for_each(dbg, data() + size(), [](auto& n) { --n.parent_id(); });
@@ -913,14 +918,12 @@ namespace xxmlxx {
             return res != nodes_.end() ? &*res : data() + size();
         }
 
-        constexpr void   tag_nodes_to_unknow_(pointer root) {
+        constexpr void   tag_tomb_nodes_to_unknow_(pointer root) {
             root->category() = tree_node_category::unknow;
             std::ranges::for_each(root + 1, data() + size(), [root, this](auto& node) {
                 auto trace_start = &node;
                 for (auto it = trace_start; it->parent_id() != -1; it = data() + it->parent_id()) {
-                    if (it->parent_id() == root - data()) {
-                        trace_start->category() = tree_node_category::unknow; break;
-                    }
+                    if (it->parent_id() == root - data()) { trace_start->category() = tree_node_category::unknow; break; }
                 }
             });
         }
@@ -949,7 +952,6 @@ namespace xxmlxx {
             return r.error();
         }
 
-        // A complete C++20 compiler should make this method constexpr available
         constexpr std::string_view next_segment(segment_type& ctx) {
             // First jump through all spaces.
             if (!time_to_add_one_) {
@@ -1038,7 +1040,7 @@ namespace xxmlxx {
             return parser_segment_iterator("Root node (first node) can not be comment or anything else!");
         }
         // Add root first because our tree doesn't support pushing root after construction.
-        tree_mem.data()->buffer(current_segment->buffer);
+        tree_mem.data()->buffer() = current_segment->buffer;
         segment_stack[++stack_top] = 0;
         
         for (++current_segment; current_segment != parser_segment_iterator(); ++current_segment) {
@@ -1066,5 +1068,12 @@ namespace xxmlxx {
         }
         return current_segment;
     }
-
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///                                                         MAIN CONTRIBUTOR LIST                                                                    ///
+///                                  AFTER YOU HAVE CONTRIBUTED TO THIS PROJECT YOUR NAME WOULD BE SHOWN HERE!                                       ///                                    
+///                                                                                                                                                  ///
+///                     xflcx1991@<https://github.com/xflcx1991>: Ported v1 version of this library to xmake package.                                ///
+///                                                                                                                                                  ///
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////                     
