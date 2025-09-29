@@ -23,11 +23,14 @@
 //
 #pragma once
 
-#include <vector>
-#include <ranges>
 #include <format>
-#include <variant>
+#include <ranges>
+#include <string>
+#include <vector>
+#include <cstdint>
 #include <cstring>
+#include <utility>
+#include <variant>
 #include <optional>
 #include <algorithm>
 
@@ -985,7 +988,6 @@ namespace xxmlxx {
         
     };
     
-    // A complete C++20 compiler should make all method constexpr available
     class parser_segment_iterator {
         document_parser                   parser_;
         bool                              not_end_ = false;

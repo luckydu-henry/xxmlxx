@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
     // Pick your own benchmark.
     constexpr const char* test_names[] = { "UnityEditor.csproj", "UnityEngine.csproj", "doomexe.vcxproj" };
     constexpr const char* dest_names[] = { "UnityEditor.out.csproj", "UnityEngine.out.csproj", "doomexe.out.vcxproj" };
-    constexpr std::size_t test_index = 0;
+    constexpr std::size_t test_index = 2;
     
     std::ifstream xml_file(test_names[test_index]);
     std::string   xml_content{std::istreambuf_iterator<char>(xml_file),std::istreambuf_iterator<char>()};
@@ -102,8 +102,8 @@ int main(int argc, char** argv) {
         std::chrono::duration<double> read_time = middle - begin;
         std::chrono::duration<double> write_time = end - middle;
 
-        std::cout << std::format("\n\n-------------------------------------------------------------------------------------------------------------------------\n"
-            "Tree from string time: {}\nTree to string time: {}\n", read_time, write_time);
+        std::cout << std::format("Using benchmark file: {}\n"
+            "Tree from string time: {}\nTree to string time: {}\n", test_names[test_index], read_time, write_time);
     }
 #endif
 }
