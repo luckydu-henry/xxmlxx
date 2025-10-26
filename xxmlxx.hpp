@@ -46,6 +46,18 @@ namespace xxmlxx {
         declaration     = 6
     };
 
+    std::string auto_replace_text_entites(std::string_view value) {
+        std::string cache;
+        for (const auto i : value) {
+            switch (i) {
+            default:  cache.push_back(i);   break;
+            case '<': cache.append("&lt;"); break;
+            case '>': cache.append("&gt;"); break;
+            }
+        }
+        return cache;
+    }
+
     template <class DomTree>
     class document_tree_node_const_iterator;
 
@@ -160,7 +172,20 @@ namespace xxmlxx {
             } 
             return *reinterpret_cast<Ty*>(const_cast<char*>(data.data()));
         }
-        
+
+        template <class OutputIt>
+        constexpr auto format_to(OutputIt iter) const {
+            switch (type) {
+            case node_type::unknown:
+            case node_type::document:  break;
+            case node_type::comment:       iter = std::format_to(iter, "<!--{:s}-->", data);                         break;
+            case node_type::element:       iter = std::format_to(iter, "<{:s}/>", data);                             break;
+            case node_type::attribute:     iter = std::format_to(iter, " {:s}=\"{:s}\"", name(), value());           break;
+            case node_type::text:          iter = std::format_to(iter, "{:s}", auto_replace_text_entites(value()));  break;
+            case node_type::declaration:   iter = std::format_to(iter, R"(<?xml version="1.0" encoding="utf-8"?>)"); break;
+            }
+            return iter;
+        }
     };
     
 
@@ -412,6 +437,38 @@ namespace xxmlxx {
             }
             return from;
         }
+
+        template <class OutputIt>
+        constexpr auto format_to_impl_(std::size_t depth, const_iterator it, OutputIt out) const {
+            if (it == end()) {
+                return out;
+            }
+            if (it.child_begin() == end()) {
+                if (it->type != node_type::text) { out = std::ranges::fill_n(out, depth << 1, ' '); }
+                out = it->format_to(out);
+                if (it->type != node_type::text) { *out++ = '\n'; }
+                return out;
+            }
+            auto c = it.child_begin();
+            if (it->type == node_type::element || it->type == node_type::comment) {
+                out = std::ranges::fill_n(out, depth << 1, ' ');
+                out = std::format_to(out, "<{:s}", it->name());
+                c = std::ranges::for_each(c,
+                    std::ranges::find_if_not(c, it.child_end(), [](const auto& n) { return n.type == node_type::attribute; }), [&out](const auto& a) {
+                    out = a.format_to(out); // Formatter would automatically format space for attribute.
+                }).in;
+                if (c == it.child_end())   { *out++ = '/'; }
+                *out++ = '>';
+                if (c->type != node_type::text) { *out++ = '\n'; }
+            }
+            for (; c != it.child_end(); ++c)    { out = format_to_impl_(depth + 1, c, out);               }
+            if (it->type == node_type::element) {
+                if (it.child_rbegin()->type != node_type::text)      { out = std::ranges::fill_n(out, depth << 1, ' '); }
+                if (it.child_rbegin()->type != node_type::attribute) { out = std::format_to(out, "</{:s}>\n", it->name()); }
+            }
+            return out;
+        }
+        
     public:
 
         constexpr document_tree(std::size_t init_cap = 1024, const BufferAllocator& buf_alloc = BufferAllocator{}, const TreeAllocator& tree_alloc = TreeAllocator{})
@@ -437,23 +494,23 @@ namespace xxmlxx {
         constexpr decltype(auto)     crbegin() const { return rbegin();                                       }
         constexpr decltype(auto)     crend()   const { return rend();                                         }
 
-        constexpr iterator emplace(node_type type, iterator parent, std::string_view content, const BufferAllocator& allocator = BufferAllocator{}) {
+        constexpr iterator       emplace(node_type type, iterator parent, std::string_view content, const BufferAllocator& allocator = BufferAllocator{}) {
             return iterator(this, &*emplace_auto_(&*parent, data(), type, content, allocator));
         }
 
-        constexpr iterator emplace_before(node_type type, iterator parent, iterator at, std::string_view content, const BufferAllocator& allocator = BufferAllocator{}) {
+        constexpr iterator       emplace_before(node_type type, iterator parent, iterator at, std::string_view content, const BufferAllocator& allocator = BufferAllocator{}) {
             auto it = emplace_at_auto_(&*parent, &*at, data(), type, content, allocator);
             return iterator(this, it != nodes_.end() ? &*it : (data() + size()));
         }
 
         constexpr const_iterator search_child_begin(const_iterator parent) const {
             auto it = std::ranges::upper_bound(nodes_.begin() + (parent - begin()), nodes_.end(), parent - begin() - 1, std::less<difference_type>(), upper_bound_proj);
-            return const_iterator(this, it != nodes_.end() ? &*it : (data() + size()));
+            return const_iterator(this, it == nodes_.end() || (it->parent_index != parent - begin()) ? data() + size() : &*it);
         }
 
         constexpr const_iterator search_child_end(const_iterator parent) const {
             auto it = std::ranges::upper_bound(nodes_.begin() + (parent - begin()), nodes_.end(), parent - begin(), std::less<difference_type>(), upper_bound_proj);
-            return const_iterator(this, it != nodes_.end() ? &*it : (data() + size()));
+            return const_iterator(this, it == nodes_.end() || ((it - 1)->parent_index != parent - begin()) ? data() + size() : &*it);
         }
 
         constexpr void           remove(iterator which) {
@@ -464,7 +521,12 @@ namespace xxmlxx {
             auto it = erase_all_unknows_(nodes_.begin() + (from - begin()));
             return iterator(this, it != nodes_.end() ? &*it : (data() + size()));
         }
-        
+
+        template <class OutputIt>
+        constexpr auto format_to(OutputIt iter) const {
+            return format_to_impl_(-1, cbegin(), iter);
+        }
+
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -803,7 +865,6 @@ namespace xxmlxx {
         
         static constexpr auto xml_parse_declaration       = (R"(<?xml version="1.0" encoding="utf-8"?>)"_ss) % CONTEXT() {
             ctx.type   = node_type::declaration;
-            ctx.buffer.assign(R"(version="1.0" encoding="utf-8")");
             ctx.flag   = xml_parse_flag::empty;
         };
         
