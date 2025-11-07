@@ -7,7 +7,7 @@ This demo **runs successfully on Windows(MSVC17) and Linux(Ubuntu-24.04 g++14, c
 
 # Features
 1. Single header, very portable.
-2. A special strucutre *"Forward Vector Tree"* to access XML nodes in a cache-friendly way.
+2. A special strucutre *"Breadth First Vector Tree"* to access XML nodes in a cache-friendly and breadth-first-iteration friendly way.
 3. A special output algorithm which uses *"Dense Vector"* to convert tree data in to string document.
 4. A document parser that combines C++ iterator and *Parser Combinator* techniques and an input algorithm that uses *Stack* to avoid traditional recursive.
 5. Basic XML-1.0 declration tag, element tag, comment node, and self-closing tag completely support (satisfies all your "daily" (de)
